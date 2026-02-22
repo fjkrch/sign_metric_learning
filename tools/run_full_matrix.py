@@ -364,7 +364,7 @@ def run_matrix(args: argparse.Namespace) -> List[Dict[str, Any]]:
             log.info("  Dataset: %s", ds_name)
 
             # Load dataset with appropriate representation
-            ds = load_dataset(root, "test", representation)
+            ds = load_dataset(root, args.eval_split, representation)
 
             for k_shot in args.shots:
                 eval_idx += 1
@@ -560,6 +560,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     p.add_argument("--n_way", type=int, default=5, help="N-way (default: 5)")
     p.add_argument("--q_query", type=int, default=15, help="Queries per class (default: 15)")
+    p.add_argument("--eval_split", type=str, default="test", help="Which split to evaluate on: test or train (default: test)")
     p.add_argument("--episodes", type=int, default=1000, help="Eval episodes (default: 1000)")
     p.add_argument("--seed", type=int, default=42, help="Random seed (default: 42)")
     p.add_argument("--device", type=str, default=None, help="Device (default: auto)")
