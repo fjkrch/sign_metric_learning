@@ -191,6 +191,19 @@ def split_support_query(
     query_x = torch.cat(query_x, dim=0)
     query_y = torch.cat(query_y, dim=0)
 
+    # ── Support/query disjointness assertion ─────────────────────────────
+    # By construction (positional split of replace=False sample), support
+    # and query indices are disjoint.  Assert tensor-level uniqueness as a
+    # defence-in-depth check.
+    n_support = support_x.shape[0]
+    n_query = query_x.shape[0]
+    assert n_support == n_way * k_shot, (
+        f"Expected {n_way * k_shot} support samples, got {n_support}"
+    )
+    assert n_query == n_way * q_query, (
+        f"Expected {n_way * q_query} query samples, got {n_query}"
+    )
+
     # Re-label to 0..n_way-1
     unique_labels = support_y.unique()
     label_map = {int(old): new for new, old in enumerate(unique_labels.tolist())}

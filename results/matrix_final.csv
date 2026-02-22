@@ -1,73 +1,73 @@
 dataset,encoder,representation,k_shot,n_way,q_query,episodes,seed,accuracy_mean,ci95,notes
-asl_alphabet,mlp,raw,1,5,15,600,42,0.880644,0.007715,no-pretrain
-asl_alphabet,mlp,raw,3,5,15,600,42,0.936644,0.005325,no-pretrain
-asl_alphabet,mlp,raw,5,5,15,600,42,0.944689,0.004815,no-pretrain
-libras_alphabet,mlp,raw,1,5,15,600,42,0.688267,0.009963,no-pretrain
-libras_alphabet,mlp,raw,3,5,15,600,42,0.777022,0.00863,no-pretrain
-libras_alphabet,mlp,raw,5,5,15,600,42,0.807667,0.008216,no-pretrain
-arabic_sign_alphabet,mlp,raw,1,5,15,600,42,0.502578,0.008341,no-pretrain
-arabic_sign_alphabet,mlp,raw,3,5,15,600,42,0.587,0.008824,no-pretrain
-arabic_sign_alphabet,mlp,raw,5,5,15,600,42,0.616511,0.008327,no-pretrain
-asl_alphabet,mlp,angle,1,5,15,600,42,0.8222,0.008989,no-pretrain
-asl_alphabet,mlp,angle,3,5,15,600,42,0.874,0.007065,no-pretrain
-asl_alphabet,mlp,angle,5,5,15,600,42,0.887667,0.006131,no-pretrain
-libras_alphabet,mlp,angle,1,5,15,600,42,0.887956,0.007343,no-pretrain
-libras_alphabet,mlp,angle,3,5,15,600,42,0.9286,0.005794,no-pretrain
-libras_alphabet,mlp,angle,5,5,15,600,42,0.947489,0.004556,no-pretrain
-arabic_sign_alphabet,mlp,angle,1,5,15,600,42,0.820267,0.008524,no-pretrain
-arabic_sign_alphabet,mlp,angle,3,5,15,600,42,0.890111,0.006433,no-pretrain
-arabic_sign_alphabet,mlp,angle,5,5,15,600,42,0.905978,0.005569,no-pretrain
-asl_alphabet,mlp,raw_angle,1,5,15,600,42,0.900644,0.007117,no-pretrain
-asl_alphabet,mlp,raw_angle,3,5,15,600,42,0.947622,0.004451,no-pretrain
-asl_alphabet,mlp,raw_angle,5,5,15,600,42,0.951578,0.003971,no-pretrain
-libras_alphabet,mlp,raw_angle,1,5,15,600,42,0.706578,0.009897,no-pretrain
-libras_alphabet,mlp,raw_angle,3,5,15,600,42,0.816222,0.008298,no-pretrain
-libras_alphabet,mlp,raw_angle,5,5,15,600,42,0.845511,0.007397,no-pretrain
-arabic_sign_alphabet,mlp,raw_angle,1,5,15,600,42,0.537422,0.008929,no-pretrain
-arabic_sign_alphabet,mlp,raw_angle,3,5,15,600,42,0.642644,0.009094,no-pretrain
-arabic_sign_alphabet,mlp,raw_angle,5,5,15,600,42,0.685489,0.008848,no-pretrain
-asl_alphabet,transformer,raw,1,5,15,600,42,0.727533,0.010192,no-pretrain
-asl_alphabet,transformer,raw,3,5,15,600,42,0.796289,0.008845,no-pretrain
-asl_alphabet,transformer,raw,5,5,15,600,42,0.809311,0.008248,no-pretrain
-libras_alphabet,transformer,raw,1,5,15,600,42,0.606911,0.009273,no-pretrain
-libras_alphabet,transformer,raw,3,5,15,600,42,0.6444,0.009591,no-pretrain
-libras_alphabet,transformer,raw,5,5,15,600,42,0.670311,0.009687,no-pretrain
-arabic_sign_alphabet,transformer,raw,1,5,15,600,42,0.439089,0.009142,no-pretrain
-arabic_sign_alphabet,transformer,raw,3,5,15,600,42,0.470067,0.009814,no-pretrain
-arabic_sign_alphabet,transformer,raw,5,5,15,600,42,0.484511,0.009215,no-pretrain
-asl_alphabet,transformer,angle,1,5,15,600,42,0.817156,0.009005,no-pretrain
-asl_alphabet,transformer,angle,3,5,15,600,42,0.869556,0.007354,no-pretrain
-asl_alphabet,transformer,angle,5,5,15,600,42,0.883444,0.006462,no-pretrain
-libras_alphabet,transformer,angle,1,5,15,600,42,0.869778,0.007721,no-pretrain
-libras_alphabet,transformer,angle,3,5,15,600,42,0.911444,0.006173,no-pretrain
-libras_alphabet,transformer,angle,5,5,15,600,42,0.931511,0.004997,no-pretrain
-arabic_sign_alphabet,transformer,angle,1,5,15,600,42,0.786333,0.008586,no-pretrain
-arabic_sign_alphabet,transformer,angle,3,5,15,600,42,0.863689,0.006859,no-pretrain
-arabic_sign_alphabet,transformer,angle,5,5,15,600,42,0.882267,0.006024,no-pretrain
-asl_alphabet,transformer,raw_angle,1,5,15,600,42,0.903444,0.006941,no-pretrain
-asl_alphabet,transformer,raw_angle,3,5,15,600,42,0.949,0.004499,no-pretrain
-asl_alphabet,transformer,raw_angle,5,5,15,600,42,0.954089,0.003974,no-pretrain
-libras_alphabet,transformer,raw_angle,1,5,15,600,42,0.718267,0.010273,no-pretrain
-libras_alphabet,transformer,raw_angle,3,5,15,600,42,0.816044,0.00839,no-pretrain
-libras_alphabet,transformer,raw_angle,5,5,15,600,42,0.845111,0.007839,no-pretrain
-arabic_sign_alphabet,transformer,raw_angle,1,5,15,600,42,0.538844,0.009041,no-pretrain
-arabic_sign_alphabet,transformer,raw_angle,3,5,15,600,42,0.616178,0.00944,no-pretrain
-arabic_sign_alphabet,transformer,raw_angle,5,5,15,600,42,0.644489,0.009124,no-pretrain
-thai_fingerspelling,mlp,raw,1,5,15,600,42,0.520044,0.009729,no-pretrain
-thai_fingerspelling,mlp,raw,3,5,15,600,42,0.591911,0.009441,no-pretrain
-thai_fingerspelling,mlp,raw,5,5,15,600,42,0.623733,0.009071,no-pretrain
-thai_fingerspelling,mlp,angle,1,5,15,600,42,0.607556,0.011303,no-pretrain
-thai_fingerspelling,mlp,angle,3,5,15,600,42,0.654622,0.009846,no-pretrain
-thai_fingerspelling,mlp,angle,5,5,15,600,42,0.674,0.009906,no-pretrain
-thai_fingerspelling,mlp,raw_angle,1,5,15,600,42,0.566933,0.010316,no-pretrain
-thai_fingerspelling,mlp,raw_angle,3,5,15,600,42,0.6392,0.00966,no-pretrain
-thai_fingerspelling,mlp,raw_angle,5,5,15,600,42,0.668978,0.009574,no-pretrain
-thai_fingerspelling,transformer,raw,1,5,15,600,42,0.425844,0.009192,no-pretrain
-thai_fingerspelling,transformer,raw,3,5,15,600,42,0.460756,0.008985,no-pretrain
-thai_fingerspelling,transformer,raw,5,5,15,600,42,0.483444,0.008915,no-pretrain
-thai_fingerspelling,transformer,angle,1,5,15,600,42,0.593444,0.011333,no-pretrain
-thai_fingerspelling,transformer,angle,3,5,15,600,42,0.646733,0.009819,no-pretrain
-thai_fingerspelling,transformer,angle,5,5,15,600,42,0.669644,0.009745,no-pretrain
-thai_fingerspelling,transformer,raw_angle,1,5,15,600,42,0.558889,0.010383,no-pretrain
-thai_fingerspelling,transformer,raw_angle,3,5,15,600,42,0.6132,0.009875,no-pretrain
-thai_fingerspelling,transformer,raw_angle,5,5,15,600,42,0.638333,0.009711,no-pretrain
+asl_alphabet,mlp,raw,1,5,15,600,42,0.886556,0.007375,no-pretrain; json-splits
+asl_alphabet,mlp,raw,3,5,15,600,42,0.938444,0.005142,no-pretrain; json-splits
+asl_alphabet,mlp,raw,5,5,15,600,42,0.949044,0.004462,no-pretrain; json-splits
+libras_alphabet,mlp,raw,1,5,15,600,42,0.696578,0.009692,no-pretrain; json-splits
+libras_alphabet,mlp,raw,3,5,15,600,42,0.788556,0.00834,no-pretrain; json-splits
+libras_alphabet,mlp,raw,5,5,15,600,42,0.812444,0.007928,no-pretrain; json-splits
+arabic_sign_alphabet,mlp,raw,1,5,15,600,42,0.513467,0.008893,no-pretrain; json-splits
+arabic_sign_alphabet,mlp,raw,3,5,15,600,42,0.605844,0.00846,no-pretrain; json-splits
+arabic_sign_alphabet,mlp,raw,5,5,15,600,42,0.645022,0.008253,no-pretrain; json-splits
+thai_fingerspelling,mlp,raw,1,5,15,600,42,0.4032,0.007464,no-pretrain; json-splits
+thai_fingerspelling,mlp,raw,3,5,15,600,42,0.469889,0.007172,no-pretrain; json-splits
+thai_fingerspelling,mlp,raw,5,5,15,600,42,0.488222,0.00751,no-pretrain; json-splits
+asl_alphabet,mlp,angle,1,5,15,600,42,0.814822,0.008734,no-pretrain; json-splits
+asl_alphabet,mlp,angle,3,5,15,600,42,0.868422,0.007142,no-pretrain; json-splits
+asl_alphabet,mlp,angle,5,5,15,600,42,0.884289,0.006315,no-pretrain; json-splits
+libras_alphabet,mlp,angle,1,5,15,600,42,0.891911,0.007072,no-pretrain; json-splits
+libras_alphabet,mlp,angle,3,5,15,600,42,0.929267,0.005456,no-pretrain; json-splits
+libras_alphabet,mlp,angle,5,5,15,600,42,0.940511,0.004715,no-pretrain; json-splits
+arabic_sign_alphabet,mlp,angle,1,5,15,600,42,0.811089,0.008847,no-pretrain; json-splits
+arabic_sign_alphabet,mlp,angle,3,5,15,600,42,0.882467,0.006328,no-pretrain; json-splits
+arabic_sign_alphabet,mlp,angle,5,5,15,600,42,0.898356,0.005686,no-pretrain; json-splits
+thai_fingerspelling,mlp,angle,1,5,15,600,42,0.462489,0.00827,no-pretrain; json-splits
+thai_fingerspelling,mlp,angle,3,5,15,600,42,0.511978,0.007841,no-pretrain; json-splits
+thai_fingerspelling,mlp,angle,5,5,15,600,42,0.526622,0.007818,no-pretrain; json-splits
+asl_alphabet,mlp,raw_angle,1,5,15,600,42,0.904356,0.006785,no-pretrain; json-splits
+asl_alphabet,mlp,raw_angle,3,5,15,600,42,0.945489,0.004575,no-pretrain; json-splits
+asl_alphabet,mlp,raw_angle,5,5,15,600,42,0.954044,0.004057,no-pretrain; json-splits
+libras_alphabet,mlp,raw_angle,1,5,15,600,42,0.716111,0.009759,no-pretrain; json-splits
+libras_alphabet,mlp,raw_angle,3,5,15,600,42,0.822333,0.007799,no-pretrain; json-splits
+libras_alphabet,mlp,raw_angle,5,5,15,600,42,0.846311,0.007657,no-pretrain; json-splits
+arabic_sign_alphabet,mlp,raw_angle,1,5,15,600,42,0.554778,0.009918,no-pretrain; json-splits
+arabic_sign_alphabet,mlp,raw_angle,3,5,15,600,42,0.665844,0.009221,no-pretrain; json-splits
+arabic_sign_alphabet,mlp,raw_angle,5,5,15,600,42,0.709978,0.008802,no-pretrain; json-splits
+thai_fingerspelling,mlp,raw_angle,1,5,15,600,42,0.433689,0.007617,no-pretrain; json-splits
+thai_fingerspelling,mlp,raw_angle,3,5,15,600,42,0.501689,0.007554,no-pretrain; json-splits
+thai_fingerspelling,mlp,raw_angle,5,5,15,600,42,0.519022,0.007783,no-pretrain; json-splits
+asl_alphabet,transformer,raw,1,5,15,600,42,0.742044,0.010046,no-pretrain; json-splits
+asl_alphabet,transformer,raw,3,5,15,600,42,0.802644,0.009018,no-pretrain; json-splits
+asl_alphabet,transformer,raw,5,5,15,600,42,0.820667,0.008512,no-pretrain; json-splits
+libras_alphabet,transformer,raw,1,5,15,600,42,0.611133,0.009307,no-pretrain; json-splits
+libras_alphabet,transformer,raw,3,5,15,600,42,0.658644,0.009157,no-pretrain; json-splits
+libras_alphabet,transformer,raw,5,5,15,600,42,0.678956,0.009191,no-pretrain; json-splits
+arabic_sign_alphabet,transformer,raw,1,5,15,600,42,0.430889,0.009239,no-pretrain; json-splits
+arabic_sign_alphabet,transformer,raw,3,5,15,600,42,0.471178,0.009798,no-pretrain; json-splits
+arabic_sign_alphabet,transformer,raw,5,5,15,600,42,0.490067,0.009459,no-pretrain; json-splits
+thai_fingerspelling,transformer,raw,1,5,15,600,42,0.332911,0.006861,no-pretrain; json-splits
+thai_fingerspelling,transformer,raw,3,5,15,600,42,0.356689,0.005865,no-pretrain; json-splits
+thai_fingerspelling,transformer,raw,5,5,15,600,42,0.360178,0.005808,no-pretrain; json-splits
+asl_alphabet,transformer,angle,1,5,15,600,42,0.807622,0.008809,no-pretrain; json-splits
+asl_alphabet,transformer,angle,3,5,15,600,42,0.862022,0.007294,no-pretrain; json-splits
+asl_alphabet,transformer,angle,5,5,15,600,42,0.876667,0.006595,no-pretrain; json-splits
+libras_alphabet,transformer,angle,1,5,15,600,42,0.869267,0.00755,no-pretrain; json-splits
+libras_alphabet,transformer,angle,3,5,15,600,42,0.910978,0.005871,no-pretrain; json-splits
+libras_alphabet,transformer,angle,5,5,15,600,42,0.925111,0.005245,no-pretrain; json-splits
+arabic_sign_alphabet,transformer,angle,1,5,15,600,42,0.783489,0.009269,no-pretrain; json-splits
+arabic_sign_alphabet,transformer,angle,3,5,15,600,42,0.857044,0.006912,no-pretrain; json-splits
+arabic_sign_alphabet,transformer,angle,5,5,15,600,42,0.877978,0.006229,no-pretrain; json-splits
+thai_fingerspelling,transformer,angle,1,5,15,600,42,0.445644,0.008167,no-pretrain; json-splits
+thai_fingerspelling,transformer,angle,3,5,15,600,42,0.505756,0.008055,no-pretrain; json-splits
+thai_fingerspelling,transformer,angle,5,5,15,600,42,0.5184,0.00801,no-pretrain; json-splits
+asl_alphabet,transformer,raw_angle,1,5,15,600,42,0.908156,0.006612,no-pretrain; json-splits
+asl_alphabet,transformer,raw_angle,3,5,15,600,42,0.947267,0.00446,no-pretrain; json-splits
+asl_alphabet,transformer,raw_angle,5,5,15,600,42,0.954022,0.004058,no-pretrain; json-splits
+libras_alphabet,transformer,raw_angle,1,5,15,600,42,0.728267,0.009841,no-pretrain; json-splits
+libras_alphabet,transformer,raw_angle,3,5,15,600,42,0.822711,0.007781,no-pretrain; json-splits
+libras_alphabet,transformer,raw_angle,5,5,15,600,42,0.846644,0.007333,no-pretrain; json-splits
+arabic_sign_alphabet,transformer,raw_angle,1,5,15,600,42,0.556111,0.009781,no-pretrain; json-splits
+arabic_sign_alphabet,transformer,raw_angle,3,5,15,600,42,0.631778,0.009162,no-pretrain; json-splits
+arabic_sign_alphabet,transformer,raw_angle,5,5,15,600,42,0.673244,0.009098,no-pretrain; json-splits
+thai_fingerspelling,transformer,raw_angle,1,5,15,600,42,0.4232,0.007472,no-pretrain; json-splits
+thai_fingerspelling,transformer,raw_angle,3,5,15,600,42,0.471156,0.007328,no-pretrain; json-splits
+thai_fingerspelling,transformer,raw_angle,5,5,15,600,42,0.486556,0.00757,no-pretrain; json-splits

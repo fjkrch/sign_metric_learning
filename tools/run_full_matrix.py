@@ -50,7 +50,7 @@ from tqdm import tqdm
 REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT))
 
-from data.datasets import LandmarkDataset
+from data.datasets import LandmarkDataset, SplitLandmarkDataset
 from data.episodes import EpisodicSampler, split_support_query, collate_episode
 from models import build_encoder, build_few_shot_model
 from utils.metrics import accuracy, few_shot_accuracy_with_ci
@@ -165,20 +165,52 @@ def find_dataset_root(name: str) -> Path:
     )
 
 
-def load_dataset(root: Path, split: str, representation: str) -> LandmarkDataset:
+def load_dataset(
+    root: Path,
+    split: str,
+    representation: str,
+    dataset_name: str = "",
+    use_json_splits: bool = False,
+) -> LandmarkDataset:
     """Load a LandmarkDataset, failing loudly if missing.
 
     Args:
         root: Dataset root (may contain train/test subdirs).
         split: 'train' or 'test'.
         representation: Representation string.
+        dataset_name: Logical dataset name (used for JSON split lookup).
+        use_json_splits: Use JSON-based splits from splits/ directory.
 
     Returns:
-        LandmarkDataset.
+        LandmarkDataset (or SplitLandmarkDataset).
 
     Raises:
         FileNotFoundError: if the split directory is empty or missing.
     """
+    # ── JSON-based splits (new protocol) ──────────────────────────────
+    if use_json_splits:
+        # Resolve the flat preprocessed directory
+        flat_root = root
+        if flat_root.name.endswith("_split"):
+            flat_root = flat_root.parent / flat_root.name[: -len("_split")]
+        if flat_root.exists():
+            ds = SplitLandmarkDataset(
+                dataset_name=dataset_name,
+                split=split,
+                data_root=str(flat_root),
+                representation=representation,
+            )
+            log.info(
+                "  Loaded %s/%s (JSON split): %d samples, %d classes",
+                dataset_name, split, len(ds), ds.num_classes,
+            )
+            return ds
+        raise FileNotFoundError(
+            f"Flat preprocessed dir not found: {flat_root}. "
+            f"Run preprocessing first."
+        )
+
+    # ── Directory-based splits (legacy) ───────────────────────────────
     split_dir = root / split
     if split_dir.exists() and any(split_dir.iterdir()):
         ds = LandmarkDataset(root=str(split_dir), representation=representation)
@@ -209,6 +241,9 @@ def evaluate(
     q_query: int,
     episodes: int,
     seed: int,
+    auto_adjust_q: bool = False,
+    dataset_name: str = "unknown",
+    split_name: str = "test",
 ) -> Dict[str, float]:
     """Run episodic evaluation and return accuracy + CI.
 
@@ -222,14 +257,20 @@ def evaluate(
     try:
         sampler = EpisodicSampler(
             labels, n_way=n_way, k_shot=k_shot, q_query=q_query,
-            episodes=episodes,
+            episodes=episodes, seed=seed,
+            auto_adjust_q=auto_adjust_q,
+            dataset_name=dataset_name, split_name=split_name,
         )
     except ValueError as e:
         log.warning("  Cannot evaluate k=%d: %s", k_shot, e)
-        return {"accuracy": float("nan"), "ci": float("nan"), "loss": float("nan")}
+        return {"accuracy": float("nan"), "ci": float("nan"), "loss": float("nan"),
+                "actual_q_query": q_query}
 
     loader = DataLoader(dataset, batch_sampler=sampler,
                         collate_fn=collate_episode, num_workers=0)
+
+    # Use the (possibly adjusted) q_query from the sampler
+    actual_q = sampler.q_query
 
     model.eval()
     accs: List[float] = []
@@ -239,7 +280,7 @@ def evaluate(
         data, lbls = batch
         data, lbls = data.to(device), lbls.to(device)
         support_x, support_y, query_x, query_y = split_support_query(
-            (data, lbls), n_way, k_shot, q_query,
+            (data, lbls), n_way, k_shot, actual_q,
         )
         support_x = support_x.to(device)
         support_y = support_y.to(device)
@@ -258,6 +299,7 @@ def evaluate(
         "accuracy": mean_acc,
         "ci": ci,
         "loss": total_loss / max(len(accs), 1),
+        "actual_q_query": sampler.q_query,
     }
 
 
@@ -373,7 +415,12 @@ def run_matrix(args: argparse.Namespace) -> List[Dict[str, Any]]:
             log.info("  Dataset: %s", ds_name)
 
             # Load dataset with appropriate representation
-            ds = load_dataset(root, args.eval_split, representation)
+            use_json = getattr(args, 'json_splits', False)
+            ds = load_dataset(
+                root, args.eval_split, representation,
+                dataset_name=ds_name, use_json_splits=use_json,
+            )
+            auto_q = getattr(args, 'auto_adjust_q', False)
 
             for k_shot in args.shots:
                 eval_idx += 1
@@ -391,21 +438,31 @@ def run_matrix(args: argparse.Namespace) -> List[Dict[str, Any]]:
                     q_query=args.q_query,
                     episodes=args.episodes,
                     seed=args.seed,
+                    auto_adjust_q=auto_q,
+                    dataset_name=ds_name,
+                    split_name=args.eval_split,
                 )
 
                 elapsed = time.time() - t0
                 acc = metrics["accuracy"]
                 ci = metrics["ci"]
+                actual_q = metrics.get("actual_q_query", args.q_query)
 
-                notes = ""
+                notes_parts = []
                 if not loaded:
-                    notes = "no-pretrain"
+                    notes_parts.append("no-pretrain")
                 if np.isnan(acc):
-                    notes = "insufficient-samples"
+                    notes_parts.append("insufficient-samples")
+                if use_json:
+                    notes_parts.append("json-splits")
+                if actual_q != args.q_query:
+                    notes_parts.append(f"auto_q={actual_q}")
+                notes = "; ".join(notes_parts)
 
                 log.info(
-                    "    → acc=%.4f ± %.4f  (%.1fs)",
+                    "    → acc=%.4f ± %.4f  (%.1fs)%s",
                     acc, ci, elapsed,
+                    f"  [q adjusted to {actual_q}]" if actual_q != args.q_query else "",
                 )
 
                 results.append({
@@ -414,7 +471,7 @@ def run_matrix(args: argparse.Namespace) -> List[Dict[str, Any]]:
                     "representation": representation,
                     "k_shot": k_shot,
                     "n_way": args.n_way,
-                    "q_query": args.q_query,
+                    "q_query": actual_q,
                     "episodes": args.episodes,
                     "seed": args.seed,
                     "accuracy_mean": round(acc, 6),
@@ -573,6 +630,14 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--episodes", type=int, default=1000, help="Eval episodes (default: 1000)")
     p.add_argument("--seed", type=int, default=42, help="Random seed (default: 42)")
     p.add_argument("--device", type=str, default=None, help="Device (default: auto)")
+    p.add_argument(
+        "--json_splits", action="store_true",
+        help="Use JSON-based splits from splits/ directory (new protocol)",
+    )
+    p.add_argument(
+        "--auto_adjust_q", action="store_true",
+        help="Auto-lower q_query when classes have too few samples",
+    )
     p.add_argument(
         "--output", type=str, default="results/matrix.csv",
         help="Output CSV path (default: results/matrix.csv)",
