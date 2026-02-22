@@ -9,11 +9,11 @@ import torch.nn as nn
 
 
 class MLPEncoder(nn.Module):
-    """Multi-layer perceptron that encodes flattened landmark sequences.
+    """Multi-layer perceptron that encodes flattened hand landmarks.
 
     Input shape:
-        ``(B, T, 21, 3)`` for raw landmarks → flattened to ``(B, T*21*3)``
-        ``(B, T, 210)`` for pairwise distances → flattened to ``(B, T*210)``
+        ``(B, 21, 3)`` for raw landmarks → flattened to ``(B, 63)``
+        ``(B, 210)`` for pairwise distances → kept as ``(B, 210)``
 
     Args:
         input_dim: Flattened input dimensionality.
@@ -24,7 +24,7 @@ class MLPEncoder(nn.Module):
 
     def __init__(
         self,
-        input_dim: int = 32 * 21 * 3,
+        input_dim: int = 21 * 3,
         hidden_dims: List[int] = [256, 256],
         embedding_dim: int = 128,
         dropout: float = 0.3,
@@ -47,7 +47,7 @@ class MLPEncoder(nn.Module):
         """Forward pass.
 
         Args:
-            x: Input tensor of shape ``(B, T, 21, 3)`` or ``(B, T, D)``.
+            x: Input tensor of shape ``(B, 21, 3)`` or ``(B, D)``.
 
         Returns:
             Embedding tensor of shape ``(B, embedding_dim)``.
@@ -67,11 +67,15 @@ def build_mlp_encoder(cfg: dict, representation: str = "raw") -> MLPEncoder:
     Returns:
         Configured ``MLPEncoder`` instance.
     """
-    seq_len = cfg["dataset"]["sequence_length"]
+    seq_len = cfg["dataset"].get("sequence_length", None)
     if representation == "pairwise":
-        input_dim = seq_len * 210
+        input_dim = 210
+    elif representation == "angle":
+        input_dim = 20
+    elif representation == "raw_angle":
+        input_dim = 83
     else:
-        input_dim = seq_len * 21 * 3
+        input_dim = 21 * 3  # 63
 
     model_cfg = cfg["model"]["mlp"]
     return MLPEncoder(

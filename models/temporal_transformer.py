@@ -1,5 +1,8 @@
 """
-Temporal Transformer encoder for landmark sequences.
+Transformer encoder for static hand landmarks.
+
+Attends over the 21 hand landmarks (spatial self-attention) rather than
+temporal frames, producing a fixed-size embedding from a single image.
 """
 
 import math
@@ -10,11 +13,11 @@ import torch.nn as nn
 
 
 class PositionalEncoding(nn.Module):
-    """Sinusoidal positional encoding.
+    """Sinusoidal positional encoding for landmark ordering.
 
     Args:
         d_model: Feature dimensionality.
-        max_len: Maximum sequence length.
+        max_len: Maximum number of landmarks/tokens.
         dropout: Dropout rate.
     """
 
@@ -36,33 +39,35 @@ class PositionalEncoding(nn.Module):
         """Add positional encoding.
 
         Args:
-            x: ``(B, T, D)``
+            x: ``(B, V, D)`` where V = number of landmarks.
 
         Returns:
-            ``(B, T, D)`` with positional encoding added.
+            ``(B, V, D)`` with positional encoding added.
         """
         x = x + self.pe[:, : x.size(1)]
         return self.dropout(x)
 
 
 class TemporalTransformerEncoder(nn.Module):
-    """Transformer encoder operating on temporal landmark sequences.
+    """Transformer encoder operating on static hand landmarks.
+
+    Applies spatial self-attention over the 21 hand landmarks.
 
     Input:
-        ``(B, T, 21, 3)`` raw landmarks → projected to ``(B, T, d_model)``
-        ``(B, T, 210)`` pairwise distances → projected to ``(B, T, d_model)``
+        ``(B, 21, 3)`` raw landmarks → projected to ``(B, 21, d_model)``
+        ``(B, 210)`` pairwise distances → projected to ``(B, 1, d_model)``
 
     Output:
         ``(B, embedding_dim)`` pooled embedding.
 
     Args:
-        input_dim: Per-frame feature dimension (21*3=63 or 210).
+        input_dim: Per-landmark feature dimension (3 for xyz, or 210 for pairwise).
         embedding_dim: Output embedding size.
         num_heads: Number of attention heads.
         num_layers: Number of Transformer encoder layers.
         dim_feedforward: FFN hidden dimension.
         dropout: Dropout rate.
-        max_len: Maximum sequence length for positional encoding.
+        max_len: Maximum number of tokens for positional encoding.
     """
 
     def __init__(
@@ -100,20 +105,20 @@ class TemporalTransformerEncoder(nn.Module):
         """Forward pass.
 
         Args:
-            x: ``(B, T, 21, 3)`` or ``(B, T, D)``.
+            x: ``(B, 21, 3)`` or ``(B, D)`` for pairwise.
 
         Returns:
             ``(B, embedding_dim)`` embedding.
         """
-        if x.dim() == 4:
-            B, T, V, C = x.shape
-            x = x.reshape(B, T, V * C)  # (B, T, 63)
-        # x: (B, T, D)
-        x = self.input_proj(x)   # (B, T, d_model)
+        if x.dim() == 2:
+            # Pairwise (B, 210) → (B, 1, 210) → treat as single token
+            x = x.unsqueeze(1)
+        # x: (B, V, C)  where V=21, C=3 (or V=1, C=210)
+        x = self.input_proj(x)   # (B, V, d_model)
         x = self.pos_enc(x)
-        x = self.transformer(x)  # (B, T, d_model)
+        x = self.transformer(x)  # (B, V, d_model)
 
-        # Global average pooling over time
+        # Global average pooling over landmarks
         x = x.mean(dim=1)         # (B, d_model)
         x = self.pool_proj(x)     # (B, embedding_dim)
         x = self.norm(x)
@@ -121,7 +126,7 @@ class TemporalTransformerEncoder(nn.Module):
 
 
 def build_transformer_encoder(cfg: dict, representation: str = "raw") -> TemporalTransformerEncoder:
-    """Factory to build a Temporal Transformer encoder from config.
+    """Factory to build a Transformer encoder from config.
 
     Args:
         cfg: Full config dict.
@@ -131,9 +136,13 @@ def build_transformer_encoder(cfg: dict, representation: str = "raw") -> Tempora
         Configured ``TemporalTransformerEncoder``.
     """
     if representation == "pairwise":
-        input_dim = 210
+        input_dim = 210   # full pairwise vector as single token
+    elif representation == "angle":
+        input_dim = 20    # joint angles as single token
+    elif representation == "raw_angle":
+        input_dim = 83    # raw+angle as single token
     else:
-        input_dim = 21 * 3  # 63
+        input_dim = 3     # per-landmark: (x, y, z)
 
     t_cfg = cfg["model"]["transformer"]
     return TemporalTransformerEncoder(

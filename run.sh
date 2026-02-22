@@ -17,8 +17,8 @@ echo ""
 echo "[Step 1] Preprocessing"
 echo "  (Skipping — using synthetic data for reproducibility demo."
 echo "   For real data, run:"
-echo "     python data/preprocess.py --video_dir data/raw/ms_asl --output_dir data/raw/ms_asl_landmarks"
-echo "     python data/preprocess.py --video_dir data/raw/bdslw60 --output_dir data/raw/bdslw60_landmarks"
+echo "     python data/preprocess.py --image_dir data/raw/asl_alphabet --output_dir data/processed/asl"
+echo "     python data/preprocess.py --image_dir data/raw/thai_fingerspelling --output_dir data/processed/thai"
 echo "  )"
 
 # ── 2. Pretrain on ASL ──────────────────────────────────────────────────────
@@ -30,19 +30,19 @@ echo "  Done."
 # ── 3. Zero-shot evaluation on BdSL ─────────────────────────────────────────
 echo ""
 echo "[Step 3] Zero-shot evaluation on BdSL"
-python evaluate.py --dataset BdSL --zero-shot --config configs/base.yaml --episodes 100
+python evaluate.py --dataset Thai --zero-shot --config configs/base.yaml --episodes 100
 echo "  Done."
 
 # ── 4. Few-shot adaptation (1-shot) ─────────────────────────────────────────
 echo ""
-echo "[Step 4] 1-shot adaptation on BdSL"
-python adapt.py --dataset BdSL --shot 1 --mode finetune_last --config configs/base.yaml
+echo "[Step 4] 1-shot adaptation on Thai"
+python adapt.py --dataset Thai --shot 1 --mode finetune_last --config configs/base.yaml
 echo "  Done."
 
-# ── 5. Few-shot adaptation (5-shot) ─────────────────────────────────────────
+# ── 5. Few-shot adaptation (5-shot) ───────────────────────────────────────
 echo ""
-echo "[Step 5] 5-shot adaptation on BdSL"
-python adapt.py --dataset BdSL --shot 5 --mode finetune_last --config configs/base.yaml
+echo "[Step 5] 5-shot adaptation on Thai"
+python adapt.py --dataset Thai --shot 5 --mode finetune_last --config configs/base.yaml
 echo "  Done."
 
 # ── 6. Ablation study ───────────────────────────────────────────────────────

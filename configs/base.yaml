@@ -8,10 +8,9 @@ deterministic: true
 
 # ── Dataset ──────────────────────────────────────────────────────────────────
 dataset:
-  name: "ASL"                     # ASL | BdSL
-  root: "data/raw/ms_asl"
-  num_classes: 100
-  sequence_length: 32
+  name: "ASL"                     # ASL | Thai | LIBRAS | Arabic
+  root: "data/processed/asl_alphabet_split"
+  num_classes: 28
   num_landmarks: 21
   landmark_dim: 3
   normalize_translation: true     # wrist-centred

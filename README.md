@@ -1,20 +1,31 @@
 # Geometry-Aware Metric Learning for Cross-Lingual Few-Shot Sign Language Recognition
 
-> A modular, reproducible research framework for few-shot sign language recognition
-> using metric learning with cross-lingual transfer from ASL to BdSL.
+> A modular, reproducible research framework for few-shot **static image**
+> sign language recognition using metric learning with cross-lingual transfer.
 
 ---
 
 ## Overview
 
-This project implements geometry-aware metric learning for sign language recognition
-using hand landmarks extracted via MediaPipe. It supports:
+This project implements geometry-aware metric learning for sign language
+recognition using hand landmarks extracted via MediaPipe from **static images**.
+It supports:
 
 - **Metric learning** with Triplet, Supervised Contrastive (SupCon), and ArcFace losses  
 - **Few-shot methods**: Prototypical Networks, Siamese Networks, Matching Networks  
-- **Three encoders**: MLP, Temporal Transformer, Graph Convolutional Network (GCN)  
-- **Cross-lingual transfer**: Pre-train on ASL → zero-shot/few-shot adapt to BdSL  
+- **Three encoders**: MLP, Spatial Transformer (landmark attention), Graph Convolutional Network (GCN)  
+- **Cross-lingual transfer**: Pre-train on ASL → zero-shot/few-shot adapt to Thai / LIBRAS / Arabic  
 - **Comprehensive ablation study** over representations, losses, models, normalisation, and shots  
+
+### Datasets
+
+| # | Dataset | Kaggle Slug | Role |
+|---|---------|-------------|------|
+| 🥇 | ASL Alphabet | `grassknoted/asl-alphabet` | Source pre-train (~1 GB, 29 classes) |
+| 🥈 | Sign Language MNIST | `datamunge/sign-language-mnist` | Low-resolution domain shift |
+| 🥉 | Thai Fingerspelling | `phattarapong58/thai-sign-language` | Target adaptation |
+| 🟡 | Brazilian LIBRAS | `williansoliveira/libras` | Cross-language reinforcement |
+| 🟡 | Arabic Sign Alphabet | `muhammadalbrham/rgb-arabic-alphabets-sign-language-dataset` | Diversity |
 
 ---
 
@@ -22,7 +33,7 @@ using hand landmarks extracted via MediaPipe. It supports:
 
 ### Rigid Transformation Invariance
 
-Hand landmarks extracted from video are subject to rigid transformations due to
+Hand landmarks extracted from images are subject to rigid transformations due to
 camera viewpoint, hand position, and distance to the camera. If a rigid transform
 is applied:
 
@@ -43,7 +54,7 @@ because rotation matrices satisfy $R^T R = I$.
 Our preprocessing pipeline reduces nuisance variation through two steps:
 
 1. **Translation invariance** — Subtract the wrist landmark (landmark 0) from all
-   landmarks per frame, centring the hand at the origin:
+   landmarks, centring the hand at the origin:
    $$\hat{\mathbf{x}}_i = \mathbf{x}_i - \mathbf{x}_0$$
 
 2. **Scale invariance** — Divide by the maximum pairwise distance (hand span):
@@ -63,13 +74,13 @@ sign_metric_learning/
 │   └── asl_to_bdsl.yaml       # Cross-lingual transfer config
 ├── data/
 │   ├── __init__.py
-│   ├── preprocess.py           # MediaPipe landmark extraction & normalisation
+│   ├── preprocess.py           # MediaPipe landmark extraction from images
 │   ├── datasets.py             # PyTorch Dataset classes
 │   └── episodes.py             # Episodic N-way K-shot sampler
 ├── models/
 │   ├── __init__.py             # Encoder/model factory functions
 │   ├── mlp_encoder.py          # MLP baseline encoder
-│   ├── temporal_transformer.py # Transformer with positional encoding
+│   ├── temporal_transformer.py # Spatial Transformer (landmark attention)
 │   ├── gcn_encoder.py          # Graph Convolution on hand skeleton
 │   ├── prototypical.py         # Prototypical Networks
 │   └── siamese.py              # Siamese & Matching Networks
@@ -82,6 +93,8 @@ sign_metric_learning/
 │   ├── seed.py                 # Reproducibility (seed, deterministic mode)
 │   ├── logger.py               # Console + file logging
 │   └── metrics.py              # Accuracy, CI, confusion matrix, t-SNE
+├── tools/
+│   └── auto_find_download_and_filter_onehand.py  # Dataset download & filter
 ├── train.py                    # Episodic training script
 ├── evaluate.py                 # Evaluation & zero-shot testing
 ├── adapt.py                    # Few-shot adaptation (1-shot, 5-shot)
@@ -98,42 +111,31 @@ sign_metric_learning/
 ### 1. Environment
 
 ```bash
-# Create a virtual environment (recommended)
-python -m venv venv
-source venv/bin/activate
-
-# Install dependencies
 pip install -r requirements.txt
 ```
 
-### 2. Dataset Preparation
+### 2. Dataset Download
 
-#### MS-ASL (Source)
+Use the included dataset tool:
 
-1. Download MS-ASL from [Microsoft Research](https://www.microsoft.com/en-us/research/project/ms-asl/).
-2. Organise videos into class sub-folders:
-   ```
-   data/raw/ms_asl/
-       train/
-           class_0/
-               video1.mp4
-           class_1/
-               ...
-       test/
-           class_0/
-               ...
-   ```
-3. Extract landmarks:
-   ```bash
-   python data/preprocess.py --video_dir data/raw/ms_asl/train --output_dir data/raw/ms_asl/train
-   python data/preprocess.py --video_dir data/raw/ms_asl/test --output_dir data/raw/ms_asl/test
-   ```
+```bash
+# Download ASL Alphabet (source)
+python tools/auto_find_download_and_filter_onehand.py \
+    --dataset asl-alphabet --download --extract --seed 42
 
-#### BdSLW60 (Target)
+# Download Thai Fingerspelling (target)
+python tools/auto_find_download_and_filter_onehand.py \
+    --dataset thai-fingerspelling --download --extract --seed 42
+```
 
-1. Download BdSLW60 from [Mendeley Data](https://data.mendeley.com/) or the original authors.
-2. Organise similarly under `data/raw/bdslw60/{train,test}/`.
-3. Run the same preprocessing.
+### 3. Preprocessing
+
+Extract landmarks from images:
+
+```bash
+python data/preprocess.py --image_dir data/raw/asl_alphabet --output_dir data/processed/asl
+python data/preprocess.py --image_dir data/raw/thai_fingerspelling --output_dir data/processed/thai
+```
 
 > **Note:** If real datasets are unavailable, the code automatically falls back to
 > synthetic data for demonstration and testing purposes.
@@ -156,25 +158,25 @@ bash run.sh
 python train.py --config configs/base.yaml --dataset ASL
 ```
 
-#### Zero-shot evaluation on BdSL
+#### Zero-shot evaluation on Thai
 
 ```bash
-python evaluate.py --dataset BdSL --zero-shot
+python evaluate.py --dataset Thai --zero-shot
 ```
 
 #### Few-shot adaptation
 
 ```bash
 # 1-shot
-python adapt.py --dataset BdSL --shot 1
+python adapt.py --dataset Thai --shot 1
 
 # 5-shot
-python adapt.py --dataset BdSL --shot 5
+python adapt.py --dataset Thai --shot 5
 
 # With different adaptation strategies
-python adapt.py --dataset BdSL --shot 5 --mode freeze
-python adapt.py --dataset BdSL --shot 5 --mode finetune_last
-python adapt.py --dataset BdSL --shot 5 --mode full_finetune
+python adapt.py --dataset Thai --shot 5 --mode freeze
+python adapt.py --dataset Thai --shot 5 --mode finetune_last
+python adapt.py --dataset Thai --shot 5 --mode full_finetune
 ```
 
 #### Ablation study
@@ -227,8 +229,8 @@ All results are saved under `results/`:
 | N-way | 5 |
 | K-shot | 1, 5 |
 | Q-query | 15 |
-| Sequence length | 32 frames |
 | Landmarks | 21 (MediaPipe hand) |
+| Input shape | (21, 3) per image |
 
 All hyperparameters are configurable via YAML files in `configs/`.
 

@@ -74,7 +74,6 @@ def get_dataset(cfg: dict, split: str = "train"):
         return LandmarkDataset(
             root=str(root),
             representation=representation,
-            sequence_length=ds_cfg["sequence_length"],
         )
     else:
         # Fallback: synthetic dataset for demo / testing
@@ -82,7 +81,6 @@ def get_dataset(cfg: dict, split: str = "train"):
         return SyntheticLandmarkDataset(
             num_classes=n_cls,
             samples_per_class=30 if split == "train" else 20,
-            sequence_length=ds_cfg["sequence_length"],
             representation=representation,
         )
 

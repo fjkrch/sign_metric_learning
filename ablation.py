@@ -131,19 +131,16 @@ def run_single_ablation(
     k_shot = cfg["few_shot"]["k_shot"]
     q_query = cfg["few_shot"]["q_query"]
 
-    # Use synthetic data for ablation
-    train_ds = SyntheticLandmarkDataset(
-        num_classes=cfg["dataset"].get("num_classes", 100),
-        samples_per_class=30,
-        sequence_length=cfg["dataset"]["sequence_length"],
-        representation=representation,
-    )
-    test_ds = SyntheticLandmarkDataset(
-        num_classes=min(cfg["dataset"].get("num_classes", 60), 60),
-        samples_per_class=20,
-        sequence_length=cfg["dataset"]["sequence_length"],
-        representation=representation,
-    )
+    # Use real data if available, else fall back to synthetic
+    train_ds = get_dataset(cfg, "train")
+    test_ds = get_dataset(cfg, "test")
+
+    # Override representation if the dataset is LandmarkDataset
+    from data.datasets import LandmarkDataset
+    if isinstance(train_ds, LandmarkDataset):
+        train_ds.representation = representation
+    if isinstance(test_ds, LandmarkDataset):
+        test_ds.representation = representation
 
     train_labels = [train_ds[i][1] for i in range(len(train_ds))]
     test_labels = [test_ds[i][1] for i in range(len(test_ds))]

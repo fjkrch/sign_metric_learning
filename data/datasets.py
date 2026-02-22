@@ -1,5 +1,5 @@
 """
-PyTorch dataset classes for preprocessed hand-landmark sequences.
+PyTorch dataset classes for preprocessed hand-landmark data (static images).
 """
 
 from pathlib import Path
@@ -9,17 +9,17 @@ import numpy as np
 import torch
 from torch.utils.data import Dataset
 
-from data.preprocess import compute_pairwise_distances
+from data.preprocess import compute_pairwise_distances, compute_joint_angles, compute_raw_angle
 
 
 class LandmarkDataset(Dataset):
-    """Dataset that loads ``.npy`` hand-landmark files.
+    """Dataset that loads ``.npy`` hand-landmark files (static images).
 
     Folder layout::
 
         root/
             class_0/
-                sample1.npy   # shape (T, 21, 3)
+                sample1.npy   # shape (21, 3)
                 sample2.npy
             class_1/
                 ...
@@ -27,7 +27,6 @@ class LandmarkDataset(Dataset):
     Args:
         root: Root directory of preprocessed ``.npy`` files.
         representation: One of ``'raw'``, ``'pairwise'``, ``'graph'``.
-        sequence_length: Expected temporal length.
         transform: Optional callable applied to the tensor.
     """
 
@@ -35,13 +34,11 @@ class LandmarkDataset(Dataset):
         self,
         root: str,
         representation: str = "raw",
-        sequence_length: int = 32,
         transform=None,
     ) -> None:
         super().__init__()
         self.root = Path(root)
         self.representation = representation
-        self.sequence_length = sequence_length
         self.transform = transform
 
         self.samples: List[Tuple[str, int]] = []
@@ -73,24 +70,19 @@ class LandmarkDataset(Dataset):
 
     def __getitem__(self, index: int) -> Tuple[torch.Tensor, int]:
         path, label = self.samples[index]
-        lm = np.load(path).astype(np.float32)  # (T, 21, 3)
+        lm = np.load(path).astype(np.float32)  # (21, 3)
 
-        # Ensure fixed length
-        if lm.shape[0] > self.sequence_length:
-            lm = lm[: self.sequence_length]
-        elif lm.shape[0] < self.sequence_length:
-            pad = np.zeros(
-                (self.sequence_length - lm.shape[0], lm.shape[1], lm.shape[2]),
-                dtype=np.float32,
-            )
-            lm = np.concatenate([lm, pad], axis=0)
+        # Handle legacy (T, 21, 3) files — take first frame
+        if lm.ndim == 3:
+            lm = lm[0]
 
         if self.representation == "pairwise":
-            lm = compute_pairwise_distances(lm)  # (T, 210)
-        elif self.representation == "graph":
-            pass  # kept as (T, 21, 3) — GCN handles adjacency
-        else:
-            pass  # raw: (T, 21, 3)
+            lm = compute_pairwise_distances(lm)  # (210,)
+        elif self.representation == "angle":
+            lm = compute_joint_angles(lm)          # (20,)
+        elif self.representation == "raw_angle":
+            lm = compute_raw_angle(lm)              # (83,)
+        # raw / graph: kept as (21, 3)
 
         tensor = torch.from_numpy(lm)
         if self.transform is not None:
@@ -101,13 +93,12 @@ class LandmarkDataset(Dataset):
 class SyntheticLandmarkDataset(Dataset):
     """Synthetic dataset for testing and demo purposes.
 
-    Generates random landmark sequences for *num_classes* classes, where
-    each class is centred at a distinct random prototype.
+    Generates random landmark data for *num_classes* classes, where
+    each class is centred at a distinct random prototype (single static image).
 
     Args:
         num_classes: Number of classes.
         samples_per_class: Samples generated per class.
-        sequence_length: Temporal length.
         representation: ``'raw'`` | ``'pairwise'`` | ``'graph'``.
         noise_std: Standard deviation of Gaussian noise around prototypes.
     """
@@ -116,21 +107,19 @@ class SyntheticLandmarkDataset(Dataset):
         self,
         num_classes: int = 100,
         samples_per_class: int = 20,
-        sequence_length: int = 32,
         representation: str = "raw",
         noise_std: float = 0.05,
     ) -> None:
         super().__init__()
         self.num_classes = num_classes
         self.samples_per_class = samples_per_class
-        self.sequence_length = sequence_length
         self.representation = representation
         self.noise_std = noise_std
 
-        # Create class prototypes
+        # Create class prototypes — single frame (21, 3)
         rng = np.random.RandomState(0)
         self.prototypes = [
-            rng.randn(sequence_length, 21, 3).astype(np.float32)
+            rng.randn(21, 3).astype(np.float32)
             for _ in range(num_classes)
         ]
 
@@ -154,7 +143,11 @@ class SyntheticLandmarkDataset(Dataset):
         lm = lm.copy()
 
         if self.representation == "pairwise":
-            lm = compute_pairwise_distances(lm)  # (T, 210)
+            lm = compute_pairwise_distances(lm)  # (210,)
+        elif self.representation == "angle":
+            lm = compute_joint_angles(lm)          # (20,)
+        elif self.representation == "raw_angle":
+            lm = compute_raw_angle(lm)              # (83,)
 
         tensor = torch.from_numpy(lm)
         return tensor, label

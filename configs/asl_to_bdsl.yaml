@@ -1,6 +1,6 @@
 # =============================================================================
-# Cross-Lingual Transfer: ASL → BdSL Configuration
-# Overrides base.yaml for BdSL target experiments
+# Cross-Lingual Transfer: ASL → Thai / LIBRAS / Arabic
+# Overrides base.yaml for target language experiments
 # =============================================================================
 
 # Inherit from base
@@ -11,15 +11,14 @@ seed: 42
 # ── Source ────────────────────────────────────────────────────────────────────
 source_dataset:
   name: "ASL"
-  root: "data/raw/ms_asl"
-  num_classes: 100
+  root: "data/raw/asl_alphabet"
+  num_classes: 29
 
 # ── Target ────────────────────────────────────────────────────────────────────
 dataset:
-  name: "BdSL"
-  root: "data/raw/bdslw60"
-  num_classes: 60
-  sequence_length: 32
+  name: "Thai"
+  root: "data/raw/thai_fingerspelling"
+  num_classes: 42
   num_landmarks: 21
   landmark_dim: 3
   normalize_translation: true

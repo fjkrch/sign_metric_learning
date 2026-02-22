@@ -1,5 +1,5 @@
 """
-Spatial-Temporal Graph Convolution encoder for hand landmarks.
+Spatial Graph Convolution encoder for hand landmarks (static images).
 """
 
 from typing import List, Tuple
@@ -88,11 +88,11 @@ class GraphConvLayer(nn.Module):
 
 
 class GCNEncoder(nn.Module):
-    """Spatial-Temporal GCN encoder for hand landmark sequences.
+    """Spatial GCN encoder for static hand landmarks.
 
-    Applies graph convolution per frame, then pools across nodes and time.
+    Applies graph convolution on the hand skeleton, then pools across nodes.
 
-    Input: ``(B, T, 21, 3)``
+    Input: ``(B, 21, 3)``
     Output: ``(B, embedding_dim)``
 
     Args:
@@ -126,7 +126,7 @@ class GCNEncoder(nn.Module):
         self.dropout = nn.Dropout(dropout)
         self.bn_layers = nn.ModuleList([nn.BatchNorm1d(num_nodes) for _ in range(num_layers)])
 
-        # Temporal pooling followed by projection
+        # Node pooling followed by projection
         self.fc = nn.Linear(hidden_dim * num_nodes, embedding_dim)
         self.norm = nn.LayerNorm(embedding_dim)
 
@@ -134,27 +134,21 @@ class GCNEncoder(nn.Module):
         """Forward pass.
 
         Args:
-            x: ``(B, T, 21, 3)``
+            x: ``(B, 21, 3)``
 
         Returns:
             ``(B, embedding_dim)``
         """
-        B, T, V, C = x.shape
-
-        # Reshape to process all frames together
-        x = x.reshape(B * T, V, C)       # (B*T, V, C)
+        B, V, C = x.shape
 
         for gcn, bn in zip(self.gcn_layers, self.bn_layers):
-            x = gcn(x, self.adj)          # (B*T, V, H)
+            x = gcn(x, self.adj)          # (B, V, H)
             x = bn(x)
             x = F.relu(x, inplace=True)
             x = self.dropout(x)
 
-        # x: (B*T, V, H)
-        x = x.reshape(B, T, -1)          # (B, T, V*H)
-
-        # Temporal average pooling
-        x = x.mean(dim=1)                # (B, V*H)
+        # x: (B, V, H) → flatten nodes
+        x = x.reshape(B, -1)             # (B, V*H)
         x = self.fc(x)                   # (B, embedding_dim)
         x = self.norm(x)
         return x
