@@ -1,0 +1,6 @@
+axis,setting,accuracy,ci,loss
+model,mlp,1.0000,0.0000,0.0000
+model,transformer,1.0000,0.0000,0.0000
+model,gcn,1.0000,0.0000,0.0000
+loss,triplet,1.0000,0.0000,0.0000
+loss,supcon,1.0000,0.0000,0.0000

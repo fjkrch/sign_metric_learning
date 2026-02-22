@@ -1,0 +1,53 @@
+# =============================================================================
+# Cross-Lingual Transfer: ASL → BdSL Configuration
+# Overrides base.yaml for BdSL target experiments
+# =============================================================================
+
+# Inherit from base
+_base_: "configs/base.yaml"
+
+seed: 42
+
+# ── Source ────────────────────────────────────────────────────────────────────
+source_dataset:
+  name: "ASL"
+  root: "data/raw/ms_asl"
+  num_classes: 100
+
+# ── Target ────────────────────────────────────────────────────────────────────
+dataset:
+  name: "BdSL"
+  root: "data/raw/bdslw60"
+  num_classes: 60
+  sequence_length: 32
+  num_landmarks: 21
+  landmark_dim: 3
+  normalize_translation: true
+  normalize_scale: true
+
+# ── Model (use pretrained ASL encoder) ───────────────────────────────────────
+model:
+  encoder: "transformer"
+  embedding_dim: 128
+  pretrained: "results/checkpoints/best_asl.pt"
+
+# ── Few-Shot ─────────────────────────────────────────────────────────────────
+few_shot:
+  method: "prototypical"
+  n_way: 5
+  k_shot: 5
+  q_query: 15
+  episodes_train: 1000
+  episodes_eval: 1000
+
+# ── Adaptation ───────────────────────────────────────────────────────────────
+adaptation:
+  mode: "finetune_last"           # freeze | finetune_last | full_finetune
+  lr: 1.0e-4
+  epochs: 50
+  shots: [1, 5]
+
+# ── Output ───────────────────────────────────────────────────────────────────
+output_dir: "results/cross_lingual"
+checkpoint_dir: "results/cross_lingual/checkpoints"
+log_file: "results/cross_lingual/train.log"
