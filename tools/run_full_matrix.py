@@ -136,13 +136,22 @@ def find_dataset_root(name: str) -> Path:
     """Locate the processed dataset directory.
 
     Search order:
-        1. data/processed/<name>_split/          (train/test split)
-        2. data/processed/<name>/                (flat)
-        3. data/filtered_onehand/<name>/
+        1. $DATA_ROOT/<name>_split/              (env var override)
+        2. $DATA_ROOT/<name>/
+        3. data/processed/<name>_split/          (train/test split)
+        4. data/processed/<name>/                (flat)
+        5. data/filtered_onehand/<name>/
 
     Raises FileNotFoundError if none found.
     """
-    candidates = [
+    data_root = Path(os.environ["DATA_ROOT"]) if "DATA_ROOT" in os.environ else None
+    candidates = []
+    if data_root is not None:
+        candidates += [
+            data_root / f"{name}_split",
+            data_root / name,
+        ]
+    candidates += [
         REPO_ROOT / "data" / "processed" / f"{name}_split",
         REPO_ROOT / "data" / "processed" / name,
         REPO_ROOT / "data" / "filtered_onehand" / name,

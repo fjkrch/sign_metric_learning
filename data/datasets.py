@@ -2,6 +2,7 @@
 PyTorch dataset classes for preprocessed hand-landmark data (static images).
 """
 
+import json
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
@@ -10,6 +11,58 @@ import torch
 from torch.utils.data import Dataset
 
 from data.preprocess import compute_pairwise_distances, compute_joint_angles, compute_raw_angle
+
+# ── Default splits directory (repo-root / splits/) ──────────────────────────
+_REPO_ROOT = Path(__file__).resolve().parent.parent
+SPLITS_DIR = _REPO_ROOT / "splits"
+
+
+def load_split_json(dataset_name: str, split: str) -> Dict[str, List[str]]:
+    """Load a split JSON produced by ``tools/make_splits.py``.
+
+    Args:
+        dataset_name: e.g. ``'asl_alphabet'``.
+        split: ``'train'`` or ``'test'``.
+
+    Returns:
+        Dict mapping class name → list of relative paths.
+
+    Raises:
+        RuntimeError: if the JSON file is missing or invalid.
+    """
+    path = SPLITS_DIR / f"{dataset_name}_{split}.json"
+    if not path.exists():
+        raise RuntimeError(
+            f"Missing split file: {path}\n"
+            f"Run:  python tools/make_splits.py --dataset {dataset_name} --seed 42 --ratio 0.7"
+        )
+    with open(path, "r", encoding="utf-8") as f:
+        data = json.load(f)
+    # Integrity: no duplicates within the split
+    all_paths = [p for paths in data.values() for p in paths]
+    if len(all_paths) != len(set(all_paths)):
+        raise RuntimeError(f"Duplicate paths detected inside {path}")
+    return data
+
+
+def validate_no_leak(dataset_name: str) -> None:
+    """Assert train/test splits for *dataset_name* have zero overlap."""
+    train_path = SPLITS_DIR / f"{dataset_name}_train.json"
+    test_path = SPLITS_DIR / f"{dataset_name}_test.json"
+    if not train_path.exists() or not test_path.exists():
+        return  # nothing to validate
+    with open(train_path) as f:
+        train_data = json.load(f)
+    with open(test_path) as f:
+        test_data = json.load(f)
+    train_set = {p for paths in train_data.values() for p in paths}
+    test_set = {p for paths in test_data.values() for p in paths}
+    overlap = train_set & test_set
+    if overlap:
+        raise RuntimeError(
+            f"[{dataset_name}] Data leak! {len(overlap)} paths in BOTH train and test. "
+            f"First: {list(overlap)[:3]}"
+        )
 
 
 class LandmarkDataset(Dataset):
@@ -151,3 +204,66 @@ class SyntheticLandmarkDataset(Dataset):
 
         tensor = torch.from_numpy(lm)
         return tensor, label
+
+class SplitLandmarkDataset(LandmarkDataset):
+    """LandmarkDataset that reads samples from a JSON split file.
+
+    The JSON file is produced by ``tools/make_splits.py`` and contains::
+
+        {"class_name": ["cls/file1.npy", "cls/file2.npy", ...], ...}
+
+    Paths inside the JSON are **relative to the dataset root**.
+
+    Args:
+        dataset_name: Logical dataset name (e.g. ``'asl_alphabet'``).
+        split: ``'train'`` or ``'test'``.
+        data_root: Root of the flat preprocessed folder
+                   (e.g. ``data/processed/asl_alphabet``).
+        representation: One of ``'raw'``, ``'pairwise'``, ``'angle'``,
+                        ``'raw_angle'``, ``'graph'``.
+        transform: Optional callable applied to the tensor.
+    """
+
+    def __init__(
+        self,
+        dataset_name: str,
+        split: str,
+        data_root: str,
+        representation: str = "raw",
+        transform=None,
+    ) -> None:
+        self._dataset_name = dataset_name
+        self._split = split
+        # Validate split names early
+        if split not in ("train", "test"):
+            raise ValueError(f"split must be 'train' or 'test', got '{split}'")
+        # Do NOT call super().__init__() yet — we need to set these first
+        # so _scan() can use them
+        self._data_root = Path(data_root)
+        # Now call parent init which will call _scan()
+        super().__init__(root=data_root, representation=representation, transform=transform)
+        # After scanning, validate no data leak
+        validate_no_leak(dataset_name)
+
+    def _scan(self) -> None:
+        """Override: load samples from the JSON split file."""
+        split_data = load_split_json(self._dataset_name, self._split)
+        self.classes = sorted(split_data.keys())
+        self.class_to_idx = {cls: idx for idx, cls in enumerate(self.classes)}
+        self.idx_to_class = {idx: cls for idx, cls in enumerate(self.classes)}
+        self.samples = []
+        missing = []
+        for cls_name in self.classes:
+            idx = self.class_to_idx[cls_name]
+            for rel_path in sorted(split_data[cls_name]):
+                full = self._data_root / rel_path
+                if not full.exists():
+                    missing.append(str(full))
+                    continue
+                self.samples.append((str(full), idx))
+        if missing:
+            raise RuntimeError(
+                f"[{self._dataset_name}/{self._split}] {len(missing)} files listed "
+                f"in split JSON are missing on disk. First 5:\n"
+                + "\n".join(missing[:5])
+            )

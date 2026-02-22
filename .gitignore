@@ -41,6 +41,7 @@ Thumbs.db
 
 # ── Backup files ─────────────────────────────────────────────────────────────
 *.bak
+*.orig
 
 # ── Kaggle credentials (never commit) ───────────────────────────────────────
 kaggle.json

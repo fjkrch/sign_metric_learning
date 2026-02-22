@@ -159,7 +159,7 @@ KNOWN_SOURCES: Dict[str, Dict[str, Any]] = {
     # ── 🥉 Target adaptation ──────────────────────────────────────────
     "thai-fingerspelling": {
         "source_type": "kaggle",
-        "identifier": "phattarapong58/thai-sign-language",
+        "identifier": "nickihartmann/thai-letter-sign-language",
         "notes": (
             "Thai Fingerspelling (image version) – different culture, hand morphology, "
             "and background variance.  Use as target adaptation domain."

@@ -18,7 +18,7 @@ import yaml
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 
-from data.datasets import LandmarkDataset, SyntheticLandmarkDataset
+from data.datasets import LandmarkDataset, SplitLandmarkDataset, SyntheticLandmarkDataset
 from data.episodes import EpisodicSampler, split_support_query, collate_episode
 from losses.supcon import build_loss
 from models import build_encoder, build_few_shot_model
@@ -56,19 +56,54 @@ def get_device(cfg: dict) -> torch.device:
     return torch.device(dev)
 
 
-def get_dataset(cfg: dict, split: str = "train"):
+def get_dataset(cfg: dict, split: str = "train", use_json_splits: bool = False):
     """Build dataset from config. Falls back to synthetic if real data unavailable.
+
+    Respects the ``DATA_ROOT`` environment variable: if set, the dataset root
+    path is resolved relative to ``$DATA_ROOT`` instead of the working dir.
+
+    When *use_json_splits* is ``True`` the samples are controlled by the JSON
+    split file in ``splits/<name>_<split>.json`` (produced by
+    ``tools/make_splits.py``).  The data root is then the **flat** preprocessed
+    directory (without ``/train`` or ``/test`` suffix).
 
     Args:
         cfg: Config dict.
         split: ``'train'`` or ``'test'``.
+        use_json_splits: Use JSON-based split files instead of directory splits.
 
     Returns:
         Dataset instance.
     """
     ds_cfg = cfg["dataset"]
     representation = cfg.get("representation", "raw")
-    root = Path(ds_cfg["root"]) / split
+    dataset_name = ds_cfg.get("name", "unknown").lower()
+
+    # ── JSON-based splits (new protocol) ─────────────────────────────────
+    if use_json_splits:
+        raw_root = ds_cfg["root"]
+        if "DATA_ROOT" in os.environ and not Path(raw_root).is_absolute():
+            flat_root = Path(os.environ["DATA_ROOT"]) / raw_root
+        else:
+            flat_root = Path(raw_root)
+        # If root points at a *_split dir, strip the suffix to get the flat dir
+        if flat_root.name.endswith("_split"):
+            flat_root = flat_root.parent / flat_root.name[: -len("_split")]
+        if flat_root.exists():
+            return SplitLandmarkDataset(
+                dataset_name=dataset_name,
+                split=split,
+                data_root=str(flat_root),
+                representation=representation,
+            )
+        # fall through to synthetic
+
+    # ── Directory-based splits (legacy) ──────────────────────────────────
+    raw_root = ds_cfg["root"]
+    if "DATA_ROOT" in os.environ and not Path(raw_root).is_absolute():
+        root = Path(os.environ["DATA_ROOT"]) / raw_root / split
+    else:
+        root = Path(raw_root) / split
 
     if root.exists() and any(root.iterdir()):
         return LandmarkDataset(
@@ -215,6 +250,12 @@ def main():
     parser.add_argument("--dataset", type=str, default=None, help="Override dataset name")
     parser.add_argument("--epochs", type=int, default=None)
     parser.add_argument("--device", type=str, default=None)
+    parser.add_argument("--json_splits", action="store_true",
+                        help="Use JSON-based splits from splits/ directory")
+    parser.add_argument("--save", type=str, default=None,
+                        help="Override checkpoint save path")
+    parser.add_argument("--auto_adjust_q", action="store_true",
+                        help="Auto-lower q_query when classes have too few samples")
     args = parser.parse_args()
 
     cfg = load_config(args.config)
@@ -240,8 +281,9 @@ def main():
 
     # Data
     representation = cfg.get("representation", "raw")
-    train_ds = get_dataset(cfg, split="train")
-    test_ds = get_dataset(cfg, split="test")
+    use_json = getattr(args, "json_splits", False)
+    train_ds = get_dataset(cfg, split="train", use_json_splits=use_json)
+    test_ds = get_dataset(cfg, split="test", use_json_splits=use_json)
 
     fs_cfg = cfg["few_shot"]
     n_way = fs_cfg["n_way"]
@@ -252,13 +294,20 @@ def main():
                     [(train_ds[i][1]) for i in range(len(train_ds))]]
     test_labels = [test_ds[i][1] for i in range(len(test_ds))]
 
+    seed = cfg.get("seed", 42)
+    ds_name = cfg["dataset"].get("name", "unknown").lower()
+    auto_q = getattr(args, "auto_adjust_q", False)
     train_sampler = EpisodicSampler(
         train_labels, n_way=n_way, k_shot=k_shot, q_query=q_query,
         episodes=fs_cfg.get("episodes_train", 1000),
+        seed=seed, auto_adjust_q=auto_q,
+        dataset_name=ds_name, split_name="train",
     )
     test_sampler = EpisodicSampler(
         test_labels, n_way=n_way, k_shot=k_shot, q_query=q_query,
         episodes=fs_cfg.get("episodes_eval", 1000),
+        seed=seed + 10000, auto_adjust_q=auto_q,
+        dataset_name=ds_name, split_name="test",
     )
 
     train_loader = DataLoader(train_ds, batch_sampler=train_sampler, collate_fn=collate_episode,
@@ -318,9 +367,13 @@ def main():
         if eval_metrics["accuracy"] > best_acc:
             best_acc = eval_metrics["accuracy"]
             patience_counter = 0
-            ckpt_path = os.path.join(
-                cfg.get("checkpoint_dir", "results/checkpoints"),
-                f"best_{cfg['dataset']['name'].lower()}.pt",
+            ckpt_path = (
+                args.save
+                if getattr(args, "save", None)
+                else os.path.join(
+                    cfg.get("checkpoint_dir", "results/checkpoints"),
+                    f"best_{cfg['dataset']['name'].lower()}.pt",
+                )
             )
             torch.save({
                 "epoch": epoch,

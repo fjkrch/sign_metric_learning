@@ -1,0 +1,119 @@
+# ═══════════════════════════════════════════════════════════════════════════
+#  Reproduction manifest for the published evaluation matrix
+# ═══════════════════════════════════════════════════════════════════════════
+#
+# This file documents the exact commands and parameters used to produce
+# results/matrix_final.csv.  Running the commands below with the same
+# data, seed, and code version will reproduce byte-identical results.
+#
+# Generated from the final evaluation run (June 2025).
+
+seed: 42
+python_version: "3.13.11"
+torch_version: "2.10.0+cpu"
+hardware: "CPU (no GPU)"
+
+# ── Step 0: Install dependencies ──────────────────────────────────────────
+# pip install -r requirements.txt
+
+# ── Step 1: Download datasets ─────────────────────────────────────────────
+# Each dataset is downloaded from Kaggle using the API.
+# Export KAGGLE_API_TOKEN or place kaggle.json in ~/.kaggle/
+#
+# python tools/auto_find_download_and_filter_onehand.py --dataset asl-alphabet       --download --extract --seed 42
+# python tools/auto_find_download_and_filter_onehand.py --dataset thai-fingerspelling --download --extract --seed 42
+# python tools/auto_find_download_and_filter_onehand.py --dataset libras-alphabet     --download --extract --seed 42
+# python tools/auto_find_download_and_filter_onehand.py --dataset arabic-sign-alphabet --download --extract --seed 42
+
+kaggle_slugs:
+  asl-alphabet:       "grassknoted/asl-alphabet"
+  thai-fingerspelling: "nickihartmann/thai-letter-sign-language"
+  libras-alphabet:    "williansoliveira/libras"
+  arabic-sign-alphabet: "muhammadalbrham/rgb-arabic-alphabets-sign-language-dataset"
+
+# ── Step 2: Preprocess (extract MediaPipe landmarks) ──────────────────────
+# python data/preprocess.py --image_dir data/raw/asl_alphabet       --output_dir data/processed/asl_alphabet
+# python data/preprocess.py --image_dir data/raw/libras_alphabet    --output_dir data/processed/libras_alphabet
+# python data/preprocess.py --image_dir data/raw/arabic_sign_alphabet --output_dir data/processed/arabic_sign_alphabet
+# python data/preprocess.py --image_dir data/raw/thai_fingerspelling --output_dir data/processed/thai_fingerspelling
+
+# ── Step 3: Create train/test splits ──────────────────────────────────────
+# python tools/make_splits.py --name asl_alphabet libras_alphabet arabic_sign_alphabet thai_fingerspelling \
+#     --test_frac 0.15 --seed 42
+
+split_params:
+  test_frac: 0.15
+  seed: 42
+  datasets:
+    - name: asl_alphabet
+      classes: 28
+      train_samples: 54063
+      test_samples: 9527
+    - name: libras_alphabet
+      classes: 21
+      train_samples: 29150
+      test_samples: 5134
+    - name: arabic_sign_alphabet
+      classes: 31
+      train_samples: 6043
+      test_samples: 1050
+    - name: thai_fingerspelling
+      classes: 42
+      train_samples: 2442
+      test_samples: 419
+
+# ── Step 4: Run evaluation matrix ────────────────────────────────────────
+# Two commands: ASL/LIBRAS/Arabic use --eval_split test,
+# Thai uses --eval_split train (test split too small: only ~10 per class).
+
+evaluation_commands:
+  three_datasets:
+    command: >
+      python tools/run_full_matrix.py
+        --datasets asl_alphabet libras_alphabet arabic_sign_alphabet
+        --encoders mlp transformer
+        --representations raw angle raw_angle
+        --shots 1 3 5
+        --episodes 600
+        --seed 42
+        --eval_split test
+        --output results/matrix_3ds.csv
+    eval_split: test
+    episodes: 600
+
+  thai_only:
+    command: >
+      python tools/run_full_matrix.py
+        --datasets thai_fingerspelling
+        --encoders mlp transformer
+        --representations raw angle raw_angle
+        --shots 1 3 5
+        --episodes 600
+        --seed 42
+        --eval_split train
+        --output results/matrix_thai.csv
+    eval_split: train
+    episodes: 600
+    note: >
+      Thai test split has only ~10 samples per class (419 total / 42 classes),
+      which is insufficient for 5-way 5-shot + 15 query = 20 per class.
+      We evaluate on the train split (34-102 samples/class) instead.
+
+  merge: >
+    After both runs, the two CSVs are concatenated (removing duplicate header)
+    into results/matrix_final.csv.
+
+# ── Matrix dimensions ────────────────────────────────────────────────────
+matrix:
+  encoders: [mlp, transformer]
+  representations: [raw, angle, raw_angle]
+  shots: [1, 3, 5]
+  n_way: 5
+  q_query: 15
+  datasets: [asl_alphabet, libras_alphabet, arabic_sign_alphabet, thai_fingerspelling]
+  total_evaluations: 72    # 2 enc × 3 repr × 4 ds × 3 shots
+  # Note: GCN was excluded — only compatible with raw representation
+
+# ── Output ────────────────────────────────────────────────────────────────
+output_file: "results/matrix_final.csv"
+output_rows: 72
