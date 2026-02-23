@@ -118,6 +118,57 @@ After preprocessing, each dataset lives in `data/processed/<name>/<class>/*.npy`
 | `angle` | 20 | Inter-joint angles from 20 anatomical triplets |
 | `raw_angle` | 83 | z-normalised raw ‖ angle |
 
+### Model Architecture
+
+```
+┌───────────┐    ┌───────────────┐    ┌──────────────┐    ┌─────────────────────┐
+│   Image   │───▶│  MediaPipe    │───▶│ 21 Landmarks │───▶│  Representation     │
+│           │    │  Hands v0.10  │    │  (x,y,z)×21  │    │  raw (63-D)         │
+└───────────┘    └───────────────┘    └──────────────┘    │  angle (20-D)       │
+                                                          │  raw_angle (83-D)   │
+                                                          └─────────┬───────────┘
+                                                                    │
+                                                                    ▼
+                                                          ┌─────────────────────┐
+                                                          │  Encoder            │
+                                                          │  MLP: 256×2 → 128  │
+                                                          │  Trans: 2L 4H →128 │
+                                                          └─────────┬───────────┘
+                                                                    │
+                                          ┌─────────────────────────┼──────────────────────┐
+                                          │                         │                      │
+                                          ▼                         ▼                      ▼
+                                   ┌─────────────┐          ┌─────────────┐         ┌────────────┐
+                                   │   Frozen    │          │ Target-sup. │         │  ProtoNet  │
+                                   │  (encoder   │          │ (last-layer │         │  Head      │
+                                   │   fixed)    │          │  fine-tuned │         │            │
+                                   └──────┬──────┘          │  on target  │         │ Prototypes │
+                                          │                 │  train split│         │  = mean    │
+                                          │                 │  NOT episode│         │  embeddings│
+                                          │                 │  support)   │         │            │
+                                          │                 └──────┬──────┘         │ Query →    │
+                                          │                        │               │ nearest    │
+                                          └────────────────────────┘               │ prototype  │
+                                                          │                        └─────┬──────┘
+                                                          ▼                              │
+                                                   128-D Embedding ──────────────────────┘
+                                                                           │
+                                                                           ▼
+                                                                   Classification
+                                                              (−‖z_q − c_n‖² → softmax)
+```
+
+**Encoder parameter counts:**
+
+| Encoder | Repr | Input Dim | Parameters |
+|---------|------|-----------|------------|
+| MLP | `raw` | 63 | 116,096 |
+| MLP | `angle` | 20 | 105,088 |
+| MLP | `raw_angle` | 83 | 121,216 |
+| Transformer | `raw` | 63 | 282,240 |
+| Transformer | `angle` | 20 | 284,416 |
+| Transformer | `raw_angle` | 83 | 292,480 |
+
 ---
 
 ## 6. Split Generation
