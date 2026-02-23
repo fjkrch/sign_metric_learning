@@ -332,6 +332,74 @@ def export_robust(outdir: Path) -> None:
 
 
 # ═════════════════════════════════════════════════════════════════════════════
+#  Extended baselines (episode-linear + input-space)
+# ═════════════════════════════════════════════════════════════════════════════
+
+def export_baselines_extended(outdir: Path) -> None:
+    """Unified baseline comparison table: ProtoNet vs episode-linear vs input-space."""
+    ep_csv = REPO_ROOT / "results" / "baseline_episode_linear.csv"
+    inp_csv = REPO_ROOT / "results" / "baseline_input_space.csv"
+    matrix_csv = REPO_ROOT / "results" / "matrix_final.csv"
+
+    if not ep_csv.exists() and not inp_csv.exists():
+        print("SKIP baselines_ext: no episode_linear or input_space CSVs found")
+        return
+
+    DS_ORDER = ["asl_alphabet", "libras_alphabet", "arabic_sign_alphabet", "thai_fingerspelling"]
+    DS_LABEL = {"asl_alphabet": "ASL", "libras_alphabet": "LIBRAS",
+                "arabic_sign_alphabet": "Arabic", "thai_fingerspelling": "Thai"}
+
+    # ProtoNet 5-shot from matrix (MLP encoder)
+    proto = {}
+    if matrix_csv.exists():
+        for r in _read_csv(matrix_csv):
+            if r["encoder"] == "mlp" and int(r["k_shot"]) == 5:
+                key = (r["dataset"], r["representation"])
+                proto[key] = (r["accuracy_mean"], r["ci95"])
+
+    # Episode-linear
+    ep_lin = {}
+    if ep_csv.exists():
+        for r in _read_csv(ep_csv):
+            key = (r["dataset"], r["representation"])
+            ep_lin[key] = (r["accuracy"], r["ci"])
+
+    # Input-space
+    inp_sp = {}
+    if inp_csv.exists():
+        for r in _read_csv(inp_csv):
+            key = (r["dataset"], r["representation"])
+            inp_sp[key] = (r["accuracy"], r["ci"])
+
+    lines = []
+    lines.append("\\begin{tabular}{@{}llccc@{}}")
+    lines.append("\\toprule")
+    lines.append("Dataset & Repr & Input-Space & Episode-Linear & ProtoNet (MLP) \\\\")
+    lines.append("\\midrule")
+
+    for ds in DS_ORDER:
+        for rep in ["raw", "angle"]:
+            label = DS_LABEL.get(ds, ds)
+            cells = []
+            for lookup in [inp_sp, ep_lin, proto]:
+                val = lookup.get((ds, rep))
+                if val:
+                    acc = _pct(val[0])
+                    ci = _ci(val[1])
+                    cells.append(f"{acc}\\ci{{{ci}}}")
+                else:
+                    cells.append("---")
+            lines.append(f"{label} & \\texttt{{{rep}}} & {' & '.join(cells)} \\\\")
+
+    lines.append("\\bottomrule")
+    lines.append("\\end{tabular}")
+
+    out = outdir / "tab_baselines_ext.tex"
+    out.write_text("\n".join(lines), encoding="utf-8")
+    print(f"Wrote {out}")
+
+
+# ═════════════════════════════════════════════════════════════════════════════
 #  CLI
 # ═════════════════════════════════════════════════════════════════════════════
 
@@ -341,6 +409,7 @@ TABLE_MAP = {
     "ablation": export_ablation,
     "linear": export_linear,
     "robust": export_robust,
+    "baselines_ext": export_baselines_extended,
 }
 
 

@@ -685,6 +685,15 @@ def main(argv=None):
     write_csv(results, out_csv)
     write_markdown(results, out_md, args.shots)
 
+    # Write reproducibility manifest
+    try:
+        from tools.write_manifest import write_manifest
+        manifest_path = out_csv.with_name(out_csv.stem + "_manifest.json")
+        write_manifest(str(manifest_path), cli_args=sys.argv,
+                       extra={"experiment": "full_matrix", "n_results": len(results)})
+    except Exception as exc:
+        log.warning("Could not write manifest: %s", exc)
+
     # Final summary to stdout
     log.info("\n" + "═" * 65)
     log.info("  DONE — %d evaluations completed", len(results))

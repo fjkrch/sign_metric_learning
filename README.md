@@ -17,8 +17,8 @@
 A geometry-aware **joint-angle representation** (20-D, invariant to rotation,
 translation, and scale) combined with Prototypical Networks achieves up to
 **95.4%** 5-way 5-shot accuracy on ASL and enables cross-lingual transfer
-from ASL to LIBRAS (86.5%), Arabic (77.3%), and Thai (52.8%) — all with a
-frozen encoder and no target-language training.
+from ASL to LIBRAS (95.0% frozen, 96.0% target-sup.), Arabic (91.3% frozen,
+92.9% target-sup.), and Thai (53.8% frozen, 58.5% target-sup.).
 
 **Key results at a glance (5-way 5-shot, test split, 600 episodes):**
 
@@ -169,6 +169,17 @@ python tools/run_full_matrix.py \
 ### 7.2 Cross-domain evaluation (pretrain on ASL)
 
 ```bash
+# Full expanded cross-domain eval (all encoder × repr × mode)
+python tools/run_cross_domain_expanded.py \
+    --encoders mlp transformer \
+    --reprs raw angle raw_angle \
+    --modes frozen adapted \\
+    --episodes 600 --seed 42
+```
+
+Or manually pretrain + evaluate single combos:
+
+```bash
 # Pretrain on ASL train split
 python train.py --config configs/base.yaml --dataset asl_alphabet \
     --json_splits --save results/checkpoints/best_asl_alphabet.pt --epochs 10
@@ -240,11 +251,11 @@ python tools/export_tables.py --outdir paper/tables
 
 ### Encoder × Representation compatibility
 
-| Encoder | `raw` | `angle` | `raw_angle` | `graph` |
-|---------|-------|---------|-------------|---------|
-| MLP | ✓ | ✓ | ✓ | ✓ |
-| Transformer | ✓ | ✓ | ✓ | ✓ |
-| GCN | ✓ | ✗ | ✗ | ✓ |
+| Encoder | `raw` | `angle` | `raw_angle` | `graph` | Status |
+|---------|-------|---------|-------------|--------|--------|
+| MLP | ✓ | ✓ | ✓ | ✓ | **Evaluated** |
+| Transformer | ✓ | ✓ | ✓ | ✓ | **Evaluated** |
+| GCN | ✓ | ✗ | ✗ | ✓ | Available (not in reported results) |
 
 ### Distance metrics
 
@@ -308,15 +319,28 @@ Full 72-row CSV: [results/matrix_final.csv](results/matrix_final.csv).
 
 ### 9.2 Cross-domain transfer (pretrained on ASL)
 
-Pretrained on ASL (Transformer / raw, 3 epochs), evaluated on each target's
-**test split** (5-way 5-shot, Q=15, 600 episodes):
+Pretrained on ASL (3 epochs, SupCon), evaluated on each target's
+**test split** (5-way 5-shot, Q=15, 600 episodes).
+``Frozen'' = encoder weights fixed; ``Target-sup.'' = last-layer fine-tuned on the full target train split (not the episode support set).
 
-| Source → Target | Accuracy | 95% CI |
-|-----------------|----------|--------|
-| ASL → ASL | **98.45%** | ±0.21 |
-| ASL → LIBRAS | **86.53%** | ±0.81 |
-| ASL → Arabic | **77.27%** | ±0.75 |
-| ASL → Thai | **52.82%** | ±0.81 |
+**Frozen encoder (best per target):**
+
+| Source → Target | Encoder | Repr | Accuracy | 95% CI |
+|-----------------|---------|------|----------|--------|
+| ASL → ASL | Transformer | raw_angle | **97.1%** | ±0.3 |
+| ASL → LIBRAS | MLP | angle | **95.0%** | ±0.4 |
+| ASL → Arabic | MLP | angle | **91.3%** | ±0.5 |
+| ASL → Thai | Transformer | raw_angle | **53.8%** | ±0.8 |
+
+**Target-sup. (last-layer fine-tuned on target train split, best per target):**
+
+| Source → Target | Encoder | Repr | Accuracy | 95% CI |
+|-----------------|---------|------|----------|--------|
+| ASL → LIBRAS | MLP | angle | **96.0%** | ±0.4 |
+| ASL → Arabic | MLP | raw_angle | **92.9%** | ±0.5 |
+| ASL → Thai | MLP | raw | **58.5%** | ±0.9 |
+
+Full 48-row expanded CSV: [results/cross_domain_all.csv](results/cross_domain_all.csv).
 
 ### 9.3 Normalisation ablation
 
@@ -394,10 +418,10 @@ sign_metric_learning/
 │   ├── mlp_encoder.py           # MLP encoder (256×2, BN, ReLU, Dropout 0.3)
 │   ├── temporal_transformer.py  # Spatial Transformer (2L, 4H, 256 FFN)
 │   ├── gcn_encoder.py           # GCN on hand skeleton graph
-│   ├── prototypical.py          # Prototypical Networks (euclidean / cosine)
-│   └── siamese.py               # Siamese & Matching Networks
+│   ├── prototypical.py          # Prototypical Networks — evaluated (euclidean / cosine)
+│   └── siamese.py               # Siamese & Matching Networks (available, not evaluated)
 ├── losses/
-│   └── supcon.py                # SupCon, Triplet, ArcFace, loss factory
+│   └── supcon.py                # SupCon (used), Triplet & ArcFace (available, not evaluated)
 ├── utils/
 │   ├── seed.py                  # Deterministic seed utilities
 │   ├── logger.py                # Console + file logging

@@ -38,7 +38,7 @@ model:
 
 # ── Few-Shot ─────────────────────────────────────────────────────────────────
 few_shot:
-  method: "prototypical"          # prototypical | siamese | matching
+  method: "prototypical"          # prototypical (evaluated) | siamese | matching (available, not evaluated)
   n_way: 5
   k_shot: 5
   q_query: 15
@@ -47,7 +47,7 @@ few_shot:
 
 # ── Loss ─────────────────────────────────────────────────────────────────────
 loss:
-  name: "supcon"                  # triplet | supcon | arcface
+  name: "supcon"                  # supcon (used) | triplet | arcface (available, not evaluated)
   triplet:
     margin: 0.5
     mining: "semi_hard"           # hard | semi_hard | all
