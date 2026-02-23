@@ -319,8 +319,7 @@ def main():
         target_cfg["dataset"] = {
             **cfg["dataset"],
             "name": args.dataset,
-            "root": f"data/raw/{args.dataset.lower()}",
-            "num_classes": 60,
+            "root": f"data/processed/{args.dataset.lower()}",
         }
         target_ds = get_dataset(target_cfg, split="test", use_json_splits=use_json)
 

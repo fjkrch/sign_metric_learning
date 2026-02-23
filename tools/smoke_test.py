@@ -206,6 +206,62 @@ def test_compileall():
     return _check("compileall (syntax check)", _run)
 
 
+def test_dataset_presence():
+    """Check that preprocessed datasets and JSON splits exist."""
+    DATASETS = [
+        "asl_alphabet", "libras_alphabet",
+        "arabic_sign_alphabet", "thai_fingerspelling",
+    ]
+    results = []
+
+    for ds in DATASETS:
+        def _check_ds(name=ds):
+            proc_dir = REPO_ROOT / "data" / "processed" / name
+            if not proc_dir.exists():
+                raise FileNotFoundError(f"Missing: {proc_dir}")
+            # Count .npy files
+            npy_count = sum(1 for _ in proc_dir.rglob("*.npy"))
+            if npy_count == 0:
+                raise FileNotFoundError(f"No .npy files in {proc_dir}")
+            # Check JSON splits
+            train_json = REPO_ROOT / "splits" / f"{name}_train.json"
+            test_json = REPO_ROOT / "splits" / f"{name}_test.json"
+            if not train_json.exists():
+                raise FileNotFoundError(f"Missing: {train_json}")
+            if not test_json.exists():
+                raise FileNotFoundError(f"Missing: {test_json}")
+
+        results.append(_check(f"dataset: {ds}", _check_ds))
+
+    return all(results)
+
+
+def test_result_csvs():
+    """Check that key result CSVs exist and have expected row counts."""
+    results = []
+    EXPECTED = {
+        "matrix_final.csv": 72,
+        "cross_domain.csv": 4,
+        "baseline_linear.csv": 8,
+        "robustness_seeds.csv": 4,
+    }
+
+    for fname, expected_rows in EXPECTED.items():
+        def _check_csv(fn=fname, n=expected_rows):
+            import csv as csv_mod
+            path = REPO_ROOT / "results" / fn
+            if not path.exists():
+                raise FileNotFoundError(f"Missing: {path}")
+            with open(path, newline="") as f:
+                row_count = sum(1 for _ in csv_mod.reader(f)) - 1  # minus header
+            if row_count != n:
+                raise ValueError(f"{fn}: expected {n} rows, got {row_count}")
+
+        results.append(_check(f"results/{fname} ({expected_rows} rows)", _check_csv))
+
+    return all(results)
+
+
 def main():
     parser = argparse.ArgumentParser(description="Repository smoke test")
     parser.add_argument("--quick", action="store_true",
@@ -219,21 +275,27 @@ def main():
 
     all_ok = True
 
-    print("\n[1/4] Imports")
+    print("\n[1/6] Imports")
     all_ok &= test_imports()
 
-    print("\n[2/4] Compile check")
+    print("\n[2/6] Compile check")
     all_ok &= test_compileall()
 
+    print("\n[3/6] Dataset presence")
+    all_ok &= test_dataset_presence()
+
+    print("\n[4/6] Result CSVs")
+    all_ok &= test_result_csvs()
+
     if not args.quick:
-        print("\n[3/4] Model forward passes")
+        print("\n[5/6] Model forward passes")
         all_ok &= test_model_forward()
 
-        print("\n[4/4] Synthetic episode")
+        print("\n[6/6] Synthetic episode")
         all_ok &= test_synthetic_episode()
     else:
-        print("\n[3/4] Skipped (--quick)")
-        print("\n[4/4] Skipped (--quick)")
+        print("\n[5/6] Skipped (--quick)")
+        print("\n[6/6] Skipped (--quick)")
 
     elapsed = time.time() - t0
     print("\n" + "=" * 50)

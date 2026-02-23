@@ -91,6 +91,7 @@ def make_base_config(args: argparse.Namespace) -> dict:
     return {
         "seed": args.seed,
         "deterministic": True,
+        "distance": getattr(args, "metric", "euclidean"),
         "dataset": {
             "name": "matrix_eval",
             "root": "",                     # filled per experiment
@@ -626,6 +627,9 @@ def build_parser() -> argparse.ArgumentParser:
     )
     p.add_argument("--n_way", type=int, default=5, help="N-way (default: 5)")
     p.add_argument("--q_query", type=int, default=15, help="Queries per class (default: 15)")
+    p.add_argument("--metric", type=str, default="euclidean",
+                   choices=["euclidean", "cosine"],
+                   help="Distance metric for ProtoNet (default: euclidean)")
     p.add_argument("--eval_split", type=str, default="test", help="Which split to evaluate on: test or train (default: test)")
     p.add_argument("--episodes", type=int, default=1000, help="Eval episodes (default: 1000)")
     p.add_argument("--seed", type=int, default=42, help="Random seed (default: 42)")

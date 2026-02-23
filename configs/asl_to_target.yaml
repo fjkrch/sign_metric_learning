@@ -3,21 +3,21 @@
 # Overrides base.yaml for target language experiments
 # =============================================================================
 
-# Inherit from base
-_base_: "configs/base.yaml"
+# NOTE: _base_ is not auto-loaded; load base.yaml first, then overlay this.
+# Usage: python train.py --config configs/base.yaml  (then override fields)
 
 seed: 42
 
 # ── Source ────────────────────────────────────────────────────────────────────
 source_dataset:
   name: "ASL"
-  root: "data/raw/asl_alphabet"
+  root: "data/processed/asl_alphabet"
   num_classes: 29
 
 # ── Target ────────────────────────────────────────────────────────────────────
 dataset:
   name: "Thai"
-  root: "data/raw/thai_fingerspelling"
+  root: "data/processed/thai_fingerspelling"
   num_classes: 42
   num_landmarks: 21
   landmark_dim: 3

@@ -37,71 +37,55 @@ kaggle_slugs:
 # python data/preprocess.py --image_dir data/raw/arabic_sign_alphabet --output_dir data/processed/arabic_sign_alphabet
 # python data/preprocess.py --image_dir data/raw/thai_fingerspelling --output_dir data/processed/thai_fingerspelling
 
-# ── Step 3: Create train/test splits ──────────────────────────────────────
-# python tools/make_splits.py --name asl_alphabet libras_alphabet arabic_sign_alphabet thai_fingerspelling \
-#     --test_frac 0.15 --seed 42
+# ── Step 3: Create train/test splits (70/30 stratified) ──────────────────
+# python tools/make_splits.py --dataset asl_alphabet         --seed 42 --ratio 0.7
+# python tools/make_splits.py --dataset libras_alphabet      --seed 42 --ratio 0.7
+# python tools/make_splits.py --dataset arabic_sign_alphabet --seed 42 --ratio 0.7
+# python tools/make_splits.py --dataset thai_fingerspelling  --seed 42 --ratio 0.7
 
 split_params:
-  test_frac: 0.15
+  ratio: 0.7
   seed: 42
+  note: "Stratified per-class split. floor(ratio * n_c) train, rest test."
   datasets:
     - name: asl_alphabet
-      classes: 28
-      train_samples: 54063
-      test_samples: 9527
+      classes: 29
+      train_samples: 44498
+      test_samples: 19093
     - name: libras_alphabet
       classes: 21
-      train_samples: 29150
-      test_samples: 5134
+      train_samples: 23993
+      test_samples: 10291
     - name: arabic_sign_alphabet
       classes: 31
-      train_samples: 6043
-      test_samples: 1050
+      train_samples: 4952
+      test_samples: 2141
     - name: thai_fingerspelling
       classes: 42
-      train_samples: 2442
-      test_samples: 419
+      train_samples: 1998
+      test_samples: 863
 
 # ── Step 4: Run evaluation matrix ────────────────────────────────────────
-# Two commands: ASL/LIBRAS/Arabic use --eval_split test,
-# Thai uses --eval_split train (test split too small: only ~10 per class).
+# All four datasets evaluated on TEST split with --auto_adjust_q:
+#
+# python tools/run_full_matrix.py \
+#     --datasets asl_alphabet libras_alphabet arabic_sign_alphabet thai_fingerspelling \
+#     --encoders mlp transformer \
+#     --representations raw angle raw_angle \
+#     --shots 1 3 5 \
+#     --episodes 600 \
+#     --seed 42 \
+#     --eval_split test \
+#     --json_splits --auto_adjust_q \
+#     --output results/matrix_final.csv
 
-evaluation_commands:
-  three_datasets:
-    command: >
-      python tools/run_full_matrix.py
-        --datasets asl_alphabet libras_alphabet arabic_sign_alphabet
-        --encoders mlp transformer
-        --representations raw angle raw_angle
-        --shots 1 3 5
-        --episodes 600
-        --seed 42
-        --eval_split test
-        --output results/matrix_3ds.csv
-    eval_split: test
-    episodes: 600
-
-  thai_only:
-    command: >
-      python tools/run_full_matrix.py
-        --datasets thai_fingerspelling
-        --encoders mlp transformer
-        --representations raw angle raw_angle
-        --shots 1 3 5
-        --episodes 600
-        --seed 42
-        --eval_split train
-        --output results/matrix_thai.csv
-    eval_split: train
-    episodes: 600
-    note: >
-      Thai test split has only ~10 samples per class (419 total / 42 classes),
-      which is insufficient for 5-way 5-shot + 15 query = 20 per class.
-      We evaluate on the train split (34-102 samples/class) instead.
-
-  merge: >
-    After both runs, the two CSVs are concatenated (removing duplicate header)
-    into results/matrix_final.csv.
+evaluation:
+  eval_split: test
+  json_splits: true
+  auto_adjust_q: true
+  episodes: 600
+  n_way: 5
+  q_query: 15
 
 # ── Matrix dimensions ────────────────────────────────────────────────────
 matrix:
@@ -114,6 +98,22 @@ matrix:
   total_evaluations: 72    # 2 enc × 3 repr × 4 ds × 3 shots
   # Note: GCN was excluded — only compatible with raw representation
 
+# ── Cross-domain (Step 5) ────────────────────────────────────────────────
+# python train.py --config configs/base.yaml --dataset asl_alphabet \
+#     --json_splits --save results/checkpoints/best_asl_alphabet.pt --epochs 10
+#
+# for target in asl_alphabet libras_alphabet arabic_sign_alphabet thai_fingerspelling; do
+#     python evaluate.py --config configs/base.yaml \
+#         --cross_domain_eval \
+#         --source_dataset asl_alphabet --target_dataset "$target" \
+#         --source_ckpt results/checkpoints/best_asl_alphabet.pt \
+#         --episodes 600 --seed 42 --json_splits --split test --auto_adjust_q
+# done
+
 # ── Output ────────────────────────────────────────────────────────────────
-output_file: "results/matrix_final.csv"
-output_rows: 72
+output_files:
+  within_domain: "results/matrix_final.csv"
+  cross_domain: "results/cross_domain.csv"
+  baselines: "results/baseline_linear.csv"
+  robustness: "results/robustness_seeds.csv"
+  normalisation_ablation: "results/nonorm_ablation.csv"

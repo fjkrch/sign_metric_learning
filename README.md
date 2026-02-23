@@ -1,5 +1,7 @@
 # Geometry-Aware Metric Learning for Cross-Lingual Few-Shot Sign Language Recognition
 
+[![GitHub](https://img.shields.io/badge/GitHub-fjkrch%2Fsign__metric__learning-blue?logo=github)](https://github.com/fjkrch/sign_metric_learning)
+
 > Modular, reproducible research framework for **static-image** sign-language
 > recognition using metric learning with cross-lingual transfer across four
 > sign-language alphabets.
@@ -10,25 +12,80 @@
 
 ---
 
-## A. Overview
+## 1. TL;DR
 
-This project implements geometry-aware metric learning for sign-language
-recognition using hand landmarks extracted via **MediaPipe** from static images.
+A geometry-aware **joint-angle representation** (20-D, invariant to rotation,
+translation, and scale) combined with Prototypical Networks achieves up to
+**95.4%** 5-way 5-shot accuracy on ASL and enables cross-lingual transfer
+from ASL to LIBRAS (86.5%), Arabic (77.3%), and Thai (52.8%) — all with a
+frozen encoder and no target-language training.
 
-**Methods:**
-- **Metric learning losses:** Triplet (online mining), Supervised Contrastive (SupCon), ArcFace
-- **Few-shot methods:** Prototypical Networks, Siamese Networks, Matching Networks
-- **Encoders:** MLP, Spatial Transformer (landmark-attention), GCN (hand skeleton graph)
-- **Representations:** `raw` (63-D xyz), `angle` (20-D joint angles), `raw_angle` (83-D concat)
+**Key results at a glance (5-way 5-shot, test split, 600 episodes):**
 
-**Evaluation protocol:**
-- JSON-based stratified train/test splits (70 / 30, seed = 42)
-- N-way K-shot episodic evaluation on the **test split** with strict K+Q feasibility
-- Deterministic per-episode seeding: `rng = np.random.RandomState(seed + e)`
-- Support/query disjointness guaranteed by construction (sample without replacement, positional split)
-- Cross-domain evaluation: pretrain on source, evaluate on target test split
+| Dataset | Best Accuracy | Config |
+|---------|---------------|--------|
+| ASL     | 95.4%         | Transformer / raw_angle |
+| LIBRAS  | 94.1%         | MLP / angle |
+| Arabic  | 89.8%         | MLP / angle |
+| Thai    | 52.7%         | MLP / angle |
 
-### Datasets
+---
+
+## 2. Reproducibility Notes
+
+| Item | Value |
+|------|-------|
+| Python | 3.13.11 |
+| PyTorch | 2.10.0+cpu |
+| Random seed | 42 (all scripts) |
+| Hardware | CPU only (no GPU required) |
+| Split ratio | 70 / 30 stratified per class |
+| Episodes | 600 per evaluation |
+| Deterministic seeding | `rng = np.random.RandomState(seed + e)` per episode |
+
+The full reproduction manifest is documented in `configs/reproduce.yaml`.
+Running the commands below (Sections 4–7) with the same data, seed, and code
+version will reproduce byte-identical results.
+
+---
+
+## 3. Install & Pin Dependencies
+
+```bash
+# Clone
+git clone https://github.com/fjkrch/sign_metric_learning.git
+cd sign_metric_learning
+
+# Create virtual environment (recommended)
+python -m venv .venv && source .venv/bin/activate
+
+# Install pinned dependencies
+pip install -r requirements.txt
+```
+
+**Exact tested versions** (see comments in `requirements.txt`):
+```
+torch==2.10.0  numpy==2.4.1  scipy==1.17.0  scikit-learn==1.8.0
+matplotlib==3.10.8  mediapipe==0.10.32  opencv-contrib-python==4.13.0.92
+PyYAML==6.0.3  tqdm==4.67.1
+```
+
+---
+
+## 4. Data Acquisition
+
+### 4.1 Download from Kaggle
+
+Requires `KAGGLE_API_TOKEN` or `~/.kaggle/kaggle.json`.
+
+```bash
+for ds in asl-alphabet thai-fingerspelling libras-alphabet arabic-sign-alphabet; do
+    python tools/auto_find_download_and_filter_onehand.py \
+        --dataset "$ds" --download --extract --seed 42
+done
+```
+
+### 4.2 Datasets
 
 | Dataset | Kaggle Slug | Classes | Total Samples |
 |---------|-------------|---------|---------------|
@@ -37,18 +94,23 @@ recognition using hand landmarks extracted via **MediaPipe** from static images.
 | Arabic Sign Alphabet | `muhammadalbrham/rgb-arabic-alphabets-sign-language-dataset` | 31 | ~7 100 |
 | Thai Fingerspelling | `nickihartmann/thai-letter-sign-language` | 42 | ~2 900 |
 
-### Theoretical Foundation
+---
 
-Hand landmarks from images are subject to rigid transforms.  If
+## 5. Preprocessing
 
-$$\mathbf{x}' = R\mathbf{x} + \mathbf{t}$$
+Extract MediaPipe hand landmarks (21 × 3 `.npy` per image) with
+wrist-centring and scale-normalisation:
 
-then pairwise distances are preserved because $R^T R = I$:
+```bash
+python data/preprocess.py --image_dir data/raw/asl_alphabet       --output_dir data/processed/asl_alphabet
+python data/preprocess.py --image_dir data/raw/libras_alphabet    --output_dir data/processed/libras_alphabet
+python data/preprocess.py --image_dir data/raw/arabic_sign_alphabet --output_dir data/processed/arabic_sign_alphabet
+python data/preprocess.py --image_dir data/raw/thai_fingerspelling --output_dir data/processed/thai_fingerspelling
+```
 
-$$\|\mathbf{x}'_i - \mathbf{x}'_j\| = \|\mathbf{x}_i - \mathbf{x}_j\|$$
+After preprocessing, each dataset lives in `data/processed/<name>/<class>/*.npy`.
 
-**Normalisation:** (1) subtract wrist landmark → translation invariance;
-(2) divide by max pairwise distance → scale invariance.
+### Representations
 
 | Repr | Dim | Description |
 |------|-----|-------------|
@@ -58,48 +120,7 @@ $$\|\mathbf{x}'_i - \mathbf{x}'_j\| = \|\mathbf{x}_i - \mathbf{x}_j\|$$
 
 ---
 
-## B. Setup
-
-### Requirements
-
-- Python ≥ 3.10
-- PyTorch ≥ 2.0
-- mediapipe, numpy, scikit-learn, matplotlib, pyyaml, tqdm
-
-```bash
-pip install -r requirements.txt
-```
-
-### Environment Variables
-
-| Variable | Purpose |
-|----------|---------|
-| `DATA_ROOT` | Override the base data directory (default: working directory) |
-| `KAGGLE_API_TOKEN` | Kaggle API credentials for dataset download |
-
----
-
-## C. Dataset Download & Preprocessing
-
-```bash
-# 1. Download from Kaggle (requires KAGGLE_API_TOKEN or ~/.kaggle/kaggle.json)
-for ds in asl-alphabet thai-fingerspelling libras-alphabet arabic-sign-alphabet; do
-    python tools/auto_find_download_and_filter_onehand.py \
-        --dataset "$ds" --download --extract --seed 42
-done
-
-# 2. Extract MediaPipe hand landmarks (21 × 3 .npy per image)
-python data/preprocess.py --image_dir data/raw/asl_alphabet       --output_dir data/processed/asl_alphabet
-python data/preprocess.py --image_dir data/raw/libras_alphabet    --output_dir data/processed/libras_alphabet
-python data/preprocess.py --image_dir data/raw/arabic_sign_alphabet --output_dir data/processed/arabic_sign_alphabet
-python data/preprocess.py --image_dir data/raw/thai_fingerspelling --output_dir data/processed/thai_fingerspelling
-```
-
-After preprocessing, each dataset lives in `data/processed/<name>/<class>/*.npy`.
-
----
-
-## D. Split Generation
+## 6. Split Generation
 
 Splits are **JSON-based, stratified, and deterministic**.  Each class is
 independently shuffled with `numpy.RandomState(seed)` and split at
@@ -114,17 +135,6 @@ python tools/make_splits.py --dataset thai_fingerspelling  --seed 42 --ratio 0.7
 
 **Output:** `splits/<dataset>_train.json` and `splits/<dataset>_test.json`.
 
-JSON format:
-```json
-{
-  "class_name": ["class_name/file001.npy", "class_name/file002.npy", ...],
-  ...
-}
-```
-
-Paths inside the JSON are relative to the flat preprocessed directory
-(`data/processed/<dataset>`).
-
 ### Split Statistics
 
 | Dataset | Train | Test | Classes | Min test/class |
@@ -137,77 +147,14 @@ Paths inside the JSON are relative to the flat preprocessed directory
 ### Integrity Guarantees
 
 - No duplicate paths within a split
-- Zero overlap between train and test
+- Zero overlap between train and test (`validate_no_leak()`)
 - At least 1 sample per class in each split
-- Validated automatically at load time (`validate_no_leak()`)
 
 ---
 
-## E. Episodic Evaluation Protocol
+## 7. Reproduce All Results
 
-### K+Q Feasibility Rule
-
-For N-way K-shot episodic evaluation with Q query samples, a class is
-**eligible** only when:
-
-$$n_c \geq K + Q$$
-
-where $n_c$ is the number of samples for that class in the **test** split.
-At least $N$ classes must be eligible, otherwise the sampler raises a
-`ValueError` with a detailed diagnostic.
-
-### Test-Split Eligibility
-
-With the default settings (K=5, Q=15, N=5):
-
-| Dataset | Eligible classes | Total classes | Min $n_c$ |
-|---------|-----------------|---------------|-----------|
-| ASL | 28 / 29 | 29 | 1 (`nothing` class) |
-| LIBRAS | 21 / 21 | 21 | 447 |
-| Arabic | 31 / 31 | 31 | 56 |
-| Thai | 27 / 42 | 42 | 12 |
-
-All four datasets have ≥ 5 eligible classes on the test split, so the
-default protocol (N=5, K=5, Q=15) runs without modification.
-
-> **Note on Thai:** Thai Fingerspelling has 42 classes with a minimum of 12
-> samples per class on the test split.  At K=5, Q=15, 27 of 42 classes are
-> eligible (those with ≥ 20 samples).  This is sufficient for 5-way
-> evaluation.  For experiments requiring all 42 classes to be eligible, pass
-> `--auto_adjust_q` which lowers Q to 7 (since 12 ≥ 5 + 7).
-
-### Auto-adjust mode
-
-Pass `--auto_adjust_q` to automatically lower $Q$ to the largest feasible
-value (minimum 1).  This is useful for datasets with small per-class counts.
-
-### Support/Query Disjointness
-
-Each episode samples K+Q indices per class **without replacement**
-(`np.random.choice(replace=False)`), then splits positionally: the first K
-indices become support, the next Q become query.  This guarantees
-**zero overlap** between support and query sets by construction.  An
-explicit assertion in `split_support_query()` validates tensor shapes as a
-defence-in-depth check.
-
-### Deterministic Sampling
-
-Each episode `e` uses its own RNG:
-```python
-rng = np.random.RandomState(seed + e)
-```
-
-This makes results **perfectly reproducible** regardless of parallelism or
-iteration order.
-
----
-
-## F. Reproducing Results
-
-### F.1 Within-domain evaluation (no pretraining)
-
-Evaluates each dataset independently on the **test split** using JSON-based
-stratified splits:
+### 7.1 Within-domain evaluation (no pretraining)
 
 ```bash
 python tools/run_full_matrix.py \
@@ -219,25 +166,14 @@ python tools/run_full_matrix.py \
     --output results/matrix_final.csv
 ```
 
-### F.2 Cross-domain evaluation (pretrain on ASL)
-
-Pretrain on ASL, evaluate on every target's test split:
+### 7.2 Cross-domain evaluation (pretrain on ASL)
 
 ```bash
-# One-command pipeline (pretrain + eval all 4 targets):
-bash tools/run_pretrain_and_eval.sh --source asl_alphabet --seed 42 --epochs 10
-
-# Or step-by-step:
-# 1. Generate splits
-for ds in asl_alphabet libras_alphabet arabic_sign_alphabet thai_fingerspelling; do
-    python tools/make_splits.py --dataset "$ds" --seed 42 --ratio 0.7
-done
-
-# 2. Pretrain on ASL (train split, JSON-based)
+# Pretrain on ASL train split
 python train.py --config configs/base.yaml --dataset asl_alphabet \
     --json_splits --save results/checkpoints/best_asl_alphabet.pt --epochs 10
 
-# 3. Evaluate cross-domain on each target (test split)
+# Evaluate cross-domain on each target's test split
 for target in asl_alphabet libras_alphabet arabic_sign_alphabet thai_fingerspelling; do
     python evaluate.py --config configs/base.yaml \
         --cross_domain_eval \
@@ -247,66 +183,99 @@ for target in asl_alphabet libras_alphabet arabic_sign_alphabet thai_fingerspell
         --episodes 600 --seed 42 \
         --json_splits --split test --auto_adjust_q
 done
-# Results appended to results/cross_domain.csv
 ```
 
-### F.3 Baseline experiments
+### 7.3 Baselines
 
 ```bash
-# Linear classifier baseline (train split → test split)
+# Linear classifier baseline (full train → test)
 python tools/run_baselines.py --experiment linear_classifier
 
 # Robustness check with 3 seeds
 python tools/run_baselines.py --experiment robustness --seeds 42 1337 2024
 
+# Episode-wise linear head (per-episode logistic regression)
+python tools/run_baselines.py --experiment episode_linear
+
+# Input-space nearest prototype (no encoder)
+python tools/run_baselines.py --experiment input_space
+
 # All baselines at once
 python tools/run_baselines.py --experiment all
 ```
 
-### F.4 Normalization ablation (requires re-preprocessing)
+### 7.4 Normalisation ablation (requires re-preprocessing)
 
 ```bash
-# Re-preprocess without wrist-centering or scale-normalization
+# Re-preprocess without normalisation
 python -c "from data.preprocess import preprocess_dataset; \
     preprocess_dataset('data/raw/arabic-sign-alphabet', 'data/processed/arabic_sign_alphabet_nonorm', \
     normalize_translation=False, normalize_scale=False)"
 python -c "from data.preprocess import preprocess_dataset; \
     preprocess_dataset('data/raw/libras-alphabet/train', 'data/processed/libras_alphabet_nonorm', \
-    normalize_translation=False, normalize_scale=False); \
-    preprocess_dataset('data/raw/libras-alphabet/test', 'data/processed/libras_alphabet_nonorm', \
     normalize_translation=False, normalize_scale=False)"
 
 # Generate splits for nonorm datasets
 python tools/make_splits.py --dataset arabic_sign_alphabet_nonorm --seed 42 --ratio 0.7
 python tools/make_splits.py --dataset libras_alphabet_nonorm     --seed 42 --ratio 0.7
 
-# Evaluate (results reported in Section G.3)
+# Evaluate
 python tools/run_full_matrix.py \
     --datasets arabic_sign_alphabet_nonorm libras_alphabet_nonorm \
     --encoders mlp --representations raw angle --shots 5 \
     --episodes 600 --seed 42 --eval_split test --json_splits --auto_adjust_q
 ```
 
-### F.5 Training from scratch
+### 7.5 Export LaTeX tables from CSVs
 
 ```bash
-python train.py --config configs/base.yaml --dataset asl_alphabet \
-    --json_splits --epochs 10 --save results/checkpoints/best_asl_alphabet.pt
+python tools/export_tables.py --outdir paper/tables
+# Generates: tab_within.tex, tab_cross.tex, tab_ablation.tex,
+#            tab_linear.tex, tab_robust.tex
 ```
-
-> **Legacy mode:** Directory-based splits (`data/processed/<name>_split/train`,
-> `data/processed/<name>_split/test`) are still supported for backward
-> compatibility.  Omit `--json_splits` to use them.  **All results reported
-> below use JSON stratified splits only.**
 
 ---
 
-## G. Results
+## 8. Baselines & Flags Reference
 
-### Within-domain (no pretraining)
+### Encoder × Representation compatibility
 
-5-way K-shot episodic evaluation on the **test split**, 600 episodes, seed 42,
-Prototypical Networks, JSON stratified splits (70/30).
+| Encoder | `raw` | `angle` | `raw_angle` | `graph` |
+|---------|-------|---------|-------------|---------|
+| MLP | ✓ | ✓ | ✓ | ✓ |
+| Transformer | ✓ | ✓ | ✓ | ✓ |
+| GCN | ✓ | ✗ | ✗ | ✓ |
+
+### Distance metrics
+
+Pass `--metric euclidean` (default) or `--metric cosine` to
+`tools/run_full_matrix.py`.  The ProtoNet forward method supports both.
+
+### Key CLI flags
+
+| Flag | Scripts | Description |
+|------|---------|-------------|
+| `--json_splits` | train, evaluate, run_full_matrix | Use JSON stratified splits |
+| `--auto_adjust_q` | evaluate, run_full_matrix | Auto-lower Q when classes are small |
+| `--metric cosine` | run_full_matrix | Cosine distance ProtoNet |
+| `--eval_split test` | evaluate, run_full_matrix | Evaluate on test split (default) |
+| `--seed 42` | all | Deterministic seed |
+
+### Episodic protocol
+
+- **N-way:** 5 (configurable via `--n_way`)
+- **K-shot:** 1, 3, 5 (configurable via `--shots`)
+- **Q-query:** 15 (configurable via `--q_query`)
+- **Episodes:** 600 (configurable via `--episodes`)
+- **Feasibility:** Classes need ≥ K+Q test samples; Thai has 27/42 eligible at K=5 Q=15.
+
+---
+
+## 9. Results
+
+### 9.1 Within-domain (no pretraining)
+
+5-way K-shot, Prototypical Networks, 600 episodes, seed 42, test split:
 
 | Dataset | Encoder | Repr | 1-shot | 3-shot | 5-shot |
 |---------|---------|------|--------|--------|--------|
@@ -335,17 +304,12 @@ Prototypical Networks, JSON stratified splits (70/30).
 | Thai | Transformer | angle | 44.6 ± 0.8 | 50.6 ± 0.8 | 51.8 ± 0.8 |
 | Thai | Transformer | raw_angle | 42.3 ± 0.7 | 47.1 ± 0.7 | 48.7 ± 0.8 |
 
-> **Best per dataset:** ASL → Transformer/raw_angle (95.4%), LIBRAS → MLP/angle (94.1%),
-> Arabic → MLP/angle (89.8%), Thai → MLP/angle (52.7%).
-> The `angle` representation generalises best across languages.
-
 Full 72-row CSV: [results/matrix_final.csv](results/matrix_final.csv).
 
-### Cross-domain transfer (pretrained on ASL)
+### 9.2 Cross-domain transfer (pretrained on ASL)
 
-Pretrained on ASL (Transformer / raw, 3 epochs, 98.5% train acc),
-evaluated on each target's **test split** (5-way 5-shot, Q=15,
-600 episodes, JSON splits):
+Pretrained on ASL (Transformer / raw, 3 epochs), evaluated on each target's
+**test split** (5-way 5-shot, Q=15, 600 episodes):
 
 | Source → Target | Accuracy | 95% CI |
 |-----------------|----------|--------|
@@ -354,71 +318,31 @@ evaluated on each target's **test split** (5-way 5-shot, Q=15,
 | ASL → Arabic | **77.27%** | ±0.75 |
 | ASL → Thai | **52.82%** | ±0.81 |
 
-CSV: [results/cross_domain.csv](results/cross_domain.csv).
-
-### G.3 Ablation: Effect of Geometry Normalization
-
-To validate the theoretical claim that joint angles are invariant to rigid
-transforms, we re-preprocessed LIBRAS and Arabic landmarks **without**
-wrist-centering or scale-normalization (MediaPipe raw output) and compared
-against normalised landmarks.
+### 9.3 Normalisation ablation
 
 5-way 5-shot, MLP encoder, 600 episodes, seed 42:
 
 | Dataset | Repr | No Norm | Normalised | Δ |
 |---------|------|---------|------------|---|
 | LIBRAS | raw | 76.4 | 81.2 | +4.8 |
-| LIBRAS | angle | **94.4** | **94.1** | −0.3† |
+| LIBRAS | angle | **94.4** | **94.1** | −0.3 |
 | Arabic | raw | 59.1 | 64.5 | +5.4 |
-| Arabic | angle | **90.1** | **89.8** | +0.3† |
+| Arabic | angle | **90.1** | **89.8** | +0.3 |
 
-†Within noise band (different MediaPipe extraction yields slightly different
-test sets); the near-zero Δ confirms that **joint angles are inherently
-invariant to translation and scale**, as predicted by the theoretical analysis
-in Section A.  The `raw` representation, by contrast, degrades 5–6 pp without
-normalization because absolute coordinates are sensitive to hand position and
-distance from camera.
+### 9.4 Linear classifier baseline
 
-Full normalization pipeline ablation (Arabic, MLP/raw, all shot settings):
+MLP encoder → StandardScaler → LogisticRegression(C=1.0) on full train split:
 
-| Setting | 1-shot | 3-shot | 5-shot |
-|---------|--------|--------|--------|
-| No normalization | 41.8 | 56.3 | 59.1 |
-| + Wrist-centering + scale-norm | 51.3 | 60.6 | 64.5 |
-| + Geometry-aware (angle) | **81.1** | **88.2** | **89.8** |
-
-The geometry-aware angle representation provides the largest single
-improvement (+25.3 pp at 5-shot over normalised raw), demonstrating that
-the contribution is not merely preprocessing but a fundamentally richer
-feature space.
-
-### G.4 Baseline: Linear Classifier
-
-To contextualise the few-shot results, we trained a full-data supervised
-baseline: `MLP encoder → StandardScaler → LogisticRegression(C=1.0,
-max_iter=1000)` on the entire train split, evaluated on the test split.
-
-| Dataset | Raw (test acc) | Angle (test acc) |
-|---------|---------------|-----------------|
+| Dataset | Raw (test) | Angle (test) |
+|---------|-----------|-------------|
 | ASL | 98.6% | 93.8% |
 | LIBRAS | **100.0%** | 99.7% |
 | Arabic | 92.7% | 90.9% |
 | Thai | 54.9% | 51.7% |
 
-**Key observations:**
-- The supervised linear classifier with full training data achieves near-perfect
-  accuracy on LIBRAS and ASL, confirming that the MLP embeddings are linearly
-  separable.  The gap to few-shot ProtoNet (e.g. LIBRAS 100% vs 94.1%) quantifies
-  the inherent cost of the few-shot paradigm.
-- Thai remains the hardest dataset even with full supervision (54.9%),
-  indicating that difficulty stems from the data itself (42 classes, small samples,
-  high inter-class similarity) rather than from the few-shot protocol.
+### 9.5 Multi-seed robustness
 
-### G.5 Robustness: Multi-seed Stability
-
-To verify that results are not an artefact of a single random seed, we
-re-evaluated the best setting (MLP / angle / 5-shot) with three seeds
-(42, 1337, 2024):
+MLP / angle / 5-shot, seeds 42, 1337, 2024:
 
 | Dataset | Seed 42 | Seed 1337 | Seed 2024 | Mean ± Std |
 |---------|---------|-----------|-----------|------------|
@@ -427,94 +351,27 @@ re-evaluated the best setting (MLP / angle / 5-shot) with three seeds
 | Arabic | 90.1 | 90.6 | 89.0 | **89.9 ± 0.8** |
 | Thai | 51.8 | 50.5 | 51.4 | **51.2 ± 0.7** |
 
-All standard deviations are **< 1 pp**, confirming that the episodic
-evaluation protocol is stable and the reported numbers are reproducible with
-negligible variance across different random seeds.
-
-### G.6 Analysis: Thai Fingerspelling Performance
-
-Thai Fingerspelling consistently yields the lowest accuracy across all
-settings (52.7% best few-shot, 54.9% supervised).  We identify three
-structural factors:
-
-1. **Class count.**  Thai has 42 classes — double the average of the other
-   three datasets (ASL 29, LIBRAS 21, Arabic 31).  The 5-way protocol
-   samples from a larger label space, increasing the chance of visually
-   similar class pairs (e.g. Thai consonants that differ only in finger
-   curl vs. spread).
-
-2. **Data scarcity.**  After MediaPipe filtering, Thai retains only ~2 900
-   samples (69 per class on average).  With a 70/30 split the test set has
-   only 863 samples.  Several classes have as few as 12 test samples,
-   limiting both the number of eligible classes (27/42 at K=5, Q=15) and
-   the statistical power of the evaluation.
-
-3. **Morphological complexity.**  Thai fingerspelling uses distinct hand
-   configurations influenced by Thai orthography.  Certain consonant groups
-   (e.g. ก–ข–ค) share similar hand shapes, differing only in subtle thumb
-   or pinky positioning.  These fine-grained distinctions create a harder
-   metric space even for geometry-aware features.
-
-**Consistency claim.**  Despite the lower absolute accuracy, the geometry-aware
-angle representation still outperforms raw coordinates consistently across all
-shot settings (+3.9pp at 5-shot, +5.9pp at 1-shot), and the cross-domain
-ASL→Thai transfer (52.8%) slightly exceeds the within-domain ProtoNet
-baseline (52.7%), suggesting that knowledge transfers even between
-typologically distant sign languages.
-
-### G.7 Comparison with Prior Work
-
-Direct comparison with prior work is difficult due to differences in
-evaluation protocols (closed-set vs. few-shot, different splits, different
-datasets).  We therefore present representative results from the literature
-alongside our protocol for context.
-
-| Paper | Setting | Dataset | Classes | Accuracy |
-|-------|---------|---------|---------|----------|
-| Mavi (2020) | Closed-set CNN | ASL Alphabet | 29 | 99.4% |
-| Podder et al. (2022) | Closed-set, hand-crafted | LIBRAS | 21 | 97.3% |
-| Alani & Cosma (2021) | Closed-set CNN | Arabic SL | 32 | 97.6% |
-| **Ours** (supervised) | Linear on MLP embed | ASL / LIBRAS / Arabic / Thai | 29/21/31/42 | 98.6 / 100 / 92.7 / 54.9% |
-| **Ours** (few-shot) | 5-way 5-shot ProtoNet | ASL / LIBRAS / Arabic / Thai | 29/21/31/42 | 95.4 / 94.1 / 89.8 / 52.7% |
-
-**Notes:**
-- Prior works use **closed-set classification** with full training data across
-  all classes — a fundamentally easier setting than few-shot learning.
-- Our supervised baseline (linear classifier) achieves comparable performance
-  (98.6% ASL, 100% LIBRAS), confirming that the embeddings are competitive.
-- The few-shot gap (≈4–7 pp on high-resource datasets) reflects the inherent
-  cost of learning from 5 examples per class vs. hundreds.
-- No prior work evaluates **cross-lingual few-shot transfer**, which is the
-  primary contribution of this paper.
+All standard deviations < 1 pp — results are stable.
 
 ---
 
-## H. Outputs
+## 10. Troubleshooting
 
-| File | Content |
-|------|---------|
-| `splits/<dataset>_train.json` | JSON split: class → list of relative .npy paths |
-| `splits/<dataset>_test.json` | Same, for test partition |
-| `results/checkpoints/best_<dataset>.pt` | Best model checkpoint (epoch, state_dict, config) |
-| `results/cross_domain.csv` | Cross-domain evaluation results |
-| `results/matrix_final.csv` | Within-domain evaluation matrix (72 rows) |
-| `results/baseline_linear.csv` | Linear classifier baseline results |
-| `results/robustness_seeds.csv` | Multi-seed robustness results |
-| `results/few_shot.csv` | Single-dataset episodic evaluation |
-| `results/plots/tsne.png` | t-SNE embedding visualisation |
+| Problem | Solution |
+|---------|----------|
+| `FileNotFoundError: splits/...json` | Run `python tools/make_splits.py --dataset <name> --seed 42 --ratio 0.7` |
+| `ValueError: Not enough eligible classes` | Pass `--auto_adjust_q` to lower Q, or check that preprocessing completed |
+| `No hand detected` during preprocessing | Expected — MediaPipe skips images without detected hands |
+| Thai accuracy low (~52%) | Structural limitation: 42 classes, 69 samples/class avg. See Section 9 analysis |
+| `ModuleNotFoundError` | Run `pip install -r requirements.txt` |
+| Need GPU | All experiments run on CPU; set `--device cuda` if GPU available |
+| Kaggle download fails | Ensure `~/.kaggle/kaggle.json` exists with valid API key |
 
-### CSV schema (within-domain matrix)
+### Smoke test
 
-```
-dataset, encoder, representation, k_shot, n_way, q_query,
-episodes, seed, accuracy_mean, ci95, notes
-```
-
-### CSV schema (cross-domain)
-
-```
-source_dataset, target_dataset, encoder, representation,
-k_shot, n_way, q_query, episodes, seed, accuracy_mean, ci95, notes
+```bash
+python tools/smoke_test.py          # full check (imports + forward + datasets + CSVs)
+python tools/smoke_test.py --quick  # imports + compile only
 ```
 
 ---
@@ -525,7 +382,7 @@ k_shot, n_way, q_query, episodes, seed, accuracy_mean, ci95, notes
 sign_metric_learning/
 ├── configs/
 │   ├── base.yaml                # Base hyperparameters
-│   ├── asl_to_bdsl.yaml         # Cross-lingual transfer config
+│   ├── asl_to_target.yaml       # Cross-lingual transfer config
 │   └── reproduce.yaml           # Reproduction manifest
 ├── data/
 │   ├── __init__.py
@@ -533,11 +390,11 @@ sign_metric_learning/
 │   ├── datasets.py              # LandmarkDataset, SplitLandmarkDataset
 │   └── episodes.py              # Deterministic episodic N-way K-shot sampler
 ├── models/
-│   ├── __init__.py              # Encoder/model factory
-│   ├── mlp_encoder.py           # MLP encoder
-│   ├── temporal_transformer.py  # Spatial Transformer
-│   ├── gcn_encoder.py           # GCN on hand skeleton
-│   ├── prototypical.py          # Prototypical Networks
+│   ├── __init__.py              # Encoder/model factory (supports --metric)
+│   ├── mlp_encoder.py           # MLP encoder (256×2, BN, ReLU, Dropout 0.3)
+│   ├── temporal_transformer.py  # Spatial Transformer (2L, 4H, 256 FFN)
+│   ├── gcn_encoder.py           # GCN on hand skeleton graph
+│   ├── prototypical.py          # Prototypical Networks (euclidean / cosine)
 │   └── siamese.py               # Siamese & Matching Networks
 ├── losses/
 │   └── supcon.py                # SupCon, Triplet, ArcFace, loss factory
@@ -547,15 +404,21 @@ sign_metric_learning/
 │   └── metrics.py               # Accuracy, CI, confusion matrix, t-SNE
 ├── tools/
 │   ├── make_splits.py           # JSON stratified splits
-│   ├── run_pretrain_and_eval.sh # Pretrain → cross-domain eval pipeline
 │   ├── run_full_matrix.py       # Encoder × Repr × Shot evaluation matrix
-│   ├── run_baselines.py         # Linear classifier, robustness, nonorm baselines
-│   ├── smoke_test.py            # Repo health check
+│   ├── run_baselines.py         # Linear, episode-linear, input-space, robustness
+│   ├── export_tables.py         # CSV → LaTeX table exporter
+│   ├── smoke_test.py            # Repo health check (6 stages)
+│   ├── run_pretrain_and_eval.sh # Pretrain → cross-domain eval pipeline
 │   └── auto_find_download_and_filter_onehand.py
 ├── splits/                      # Generated JSON split files
 ├── results/
-│   └── matrix_final.csv         # Published evaluation results
-├── train.py                     # Episodic training (supports --json_splits)
+│   ├── matrix_final.csv         # Within-domain (72 rows)
+│   ├── cross_domain.csv         # Cross-domain (4 rows)
+│   ├── baseline_linear.csv      # Linear classifier (8 rows)
+│   ├── robustness_seeds.csv     # Multi-seed (4 rows)
+│   └── nonorm_ablation.csv      # Normalisation ablation (8 rows)
+├── paper/tables/                # Auto-generated LaTeX table fragments
+├── train.py                     # Episodic training
 ├── evaluate.py                  # Evaluation & cross-domain eval
 ├── adapt.py                     # Few-shot adaptation
 ├── ablation.py                  # Ablation study
@@ -563,15 +426,6 @@ sign_metric_learning/
 ├── CITATION.bib
 ├── LICENSE                      # MIT
 └── README.md
-```
-
----
-
-## Smoke Test
-
-```bash
-python tools/smoke_test.py          # full check
-python tools/smoke_test.py --quick  # imports only
 ```
 
 ---

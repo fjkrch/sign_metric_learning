@@ -165,7 +165,7 @@ def adapt(
 def main():
     parser = argparse.ArgumentParser(description="Few-shot adaptation")
     parser.add_argument("--config", type=str, default="configs/base.yaml")
-    parser.add_argument("--dataset", type=str, default="BdSL")
+    parser.add_argument("--dataset", type=str, default="Thai")
     parser.add_argument("--shot", type=int, default=1, choices=[1, 5])
     parser.add_argument("--mode", type=str, default="finetune_last",
                         choices=["freeze", "finetune_last", "full_finetune"])
@@ -211,8 +211,7 @@ def main():
     target_cfg["dataset"] = {
         **cfg["dataset"],
         "name": args.dataset,
-        "root": f"data/raw/{args.dataset.lower()}",
-        "num_classes": 60,
+        "root": f"data/processed/{args.dataset.lower()}",
     }
     target_ds = get_dataset(target_cfg, split="train")
 

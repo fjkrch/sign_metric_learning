@@ -46,9 +46,10 @@ DATASETS = {
     "thai_fingerspelling":  "data/processed/thai_fingerspelling",
 }
 
-def build_cfg(encoder: str, representation: str) -> dict:
+def build_cfg(encoder: str, representation: str, distance: str = "euclidean") -> dict:
     return {
         "representation": representation,
+        "distance": distance,
         "model": {
             "encoder": encoder,
             "embedding_dim": 128,
@@ -235,13 +236,173 @@ def run_robustness(args):
 
 
 # ═════════════════════════════════════════════════════════════════════════════
+#  (C) Episode-wise linear head baseline
+# ═════════════════════════════════════════════════════════════════════════════
+
+def run_episode_linear(args):
+    """Per-episode logistic regression on support embeddings, eval on query.
+
+    This baseline replaces the ProtoNet nearest-prototype head with a
+    per-episode supervised classifier fitted on the K*N support embeddings.
+    """
+    from sklearn.linear_model import LogisticRegression
+
+    device = torch.device("cpu")
+    n_way, k_shot, q_query, episodes = 5, 5, 15, 600
+    seed = 42
+    results = []
+
+    for ds_name, data_root in DATASETS.items():
+        for rep in ["raw", "angle"]:
+            print(f"\n=== Episode-Linear: {ds_name} | mlp/{rep} ===")
+            set_seed(seed + k_shot * 1000, deterministic=True)
+
+            ds = SplitLandmarkDataset(ds_name, "test", data_root, rep)
+            labels = [ds[i][1] for i in range(len(ds))]
+
+            try:
+                sampler = EpisodicSampler(
+                    labels, n_way=n_way, k_shot=k_shot, q_query=q_query,
+                    episodes=episodes, seed=seed,
+                    auto_adjust_q=True,
+                    dataset_name=ds_name, split_name="test",
+                )
+            except ValueError as e:
+                print(f"  SKIP: {e}")
+                continue
+
+            loader = DataLoader(ds, batch_sampler=sampler, collate_fn=collate_episode)
+            cfg = build_cfg("mlp", rep)
+            encoder = build_encoder(cfg, rep)
+            model = build_few_shot_model(cfg, encoder).to(device)
+            model.eval()
+
+            actual_q = sampler.q_query
+            accs = []
+            for batch in loader:
+                data, lbls = batch
+                sx, sy, qx, qy = split_support_query(
+                    (data.to(device), lbls.to(device)),
+                    n_way, k_shot, actual_q,
+                )
+                with torch.no_grad():
+                    s_emb = model.get_embeddings(sx).cpu().numpy()
+                    q_emb = model.get_embeddings(qx).cpu().numpy()
+                sy_np = sy.cpu().numpy()
+                qy_np = qy.cpu().numpy()
+
+                # Fit per-episode logistic regression
+                clf = LogisticRegression(max_iter=200, C=1.0, solver="lbfgs")
+                clf.fit(s_emb, sy_np)
+                preds = clf.predict(q_emb)
+                acc = float((preds == qy_np).mean())
+                accs.append(acc)
+
+            mean_acc, ci = few_shot_accuracy_with_ci(accs)
+            print(f"  Episode-linear: {mean_acc:.4f} ± {ci:.4f}")
+            results.append({
+                "dataset": ds_name, "encoder": "mlp", "representation": rep,
+                "method": "episode_linear", "k_shot": k_shot,
+                "accuracy": round(mean_acc, 4), "ci": round(ci, 4),
+            })
+
+    csv_path = REPO_ROOT / "results" / "baseline_episode_linear.csv"
+    with open(csv_path, "w", newline="") as f:
+        writer = csv.DictWriter(f, fieldnames=[
+            "dataset", "encoder", "representation", "method", "k_shot",
+            "accuracy", "ci"])
+        writer.writeheader()
+        writer.writerows(results)
+    print(f"\nSaved: {csv_path}")
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+#  (D) Input-space nearest-prototype baseline (no encoder)
+# ═════════════════════════════════════════════════════════════════════════════
+
+def run_input_space(args):
+    """Nearest-prototype directly in the raw feature space (no learned encoder).
+
+    Replaces the encoder with an identity function and computes ProtoNet
+    classification in the original input space.
+    """
+    device = torch.device("cpu")
+    n_way, k_shot, q_query, episodes = 5, 5, 15, 600
+    seed = 42
+    results = []
+
+    for ds_name, data_root in DATASETS.items():
+        for rep in ["raw", "angle"]:
+            print(f"\n=== Input-Space ProtoNet: {ds_name} | {rep} ===")
+            set_seed(seed + k_shot * 1000, deterministic=True)
+
+            ds = SplitLandmarkDataset(ds_name, "test", data_root, rep)
+            labels = [ds[i][1] for i in range(len(ds))]
+
+            try:
+                sampler = EpisodicSampler(
+                    labels, n_way=n_way, k_shot=k_shot, q_query=q_query,
+                    episodes=episodes, seed=seed,
+                    auto_adjust_q=True,
+                    dataset_name=ds_name, split_name="test",
+                )
+            except ValueError as e:
+                print(f"  SKIP: {e}")
+                continue
+
+            loader = DataLoader(ds, batch_sampler=sampler, collate_fn=collate_episode)
+            actual_q = sampler.q_query
+            accs = []
+
+            for batch in loader:
+                data, lbls = batch
+                sx, sy, qx, qy = split_support_query(
+                    (data.to(device), lbls.to(device)),
+                    n_way, k_shot, actual_q,
+                )
+                # Flatten inputs if needed
+                sx_flat = sx.reshape(sx.size(0), -1)
+                qx_flat = qx.reshape(qx.size(0), -1)
+
+                # Compute prototypes in input space
+                prototypes = torch.zeros(n_way, sx_flat.size(-1), device=device)
+                for c in range(n_way):
+                    mask = sy == c
+                    prototypes[c] = sx_flat[mask].mean(dim=0)
+
+                # Nearest prototype
+                dists = torch.cdist(qx_flat.float(), prototypes.float(), p=2)
+                preds = dists.argmin(dim=1)
+                acc = float((preds == qy).float().mean().item())
+                accs.append(acc)
+
+            mean_acc, ci = few_shot_accuracy_with_ci(accs)
+            print(f"  Input-space: {mean_acc:.4f} ± {ci:.4f}")
+            results.append({
+                "dataset": ds_name, "representation": rep,
+                "method": "input_space_proto", "k_shot": k_shot,
+                "accuracy": round(mean_acc, 4), "ci": round(ci, 4),
+            })
+
+    csv_path = REPO_ROOT / "results" / "baseline_input_space.csv"
+    with open(csv_path, "w", newline="") as f:
+        writer = csv.DictWriter(f, fieldnames=[
+            "dataset", "representation", "method", "k_shot",
+            "accuracy", "ci"])
+        writer.writeheader()
+        writer.writerows(results)
+    print(f"\nSaved: {csv_path}")
+
+
+# ═════════════════════════════════════════════════════════════════════════════
 #  CLI
 # ═════════════════════════════════════════════════════════════════════════════
 
 def main():
     parser = argparse.ArgumentParser(description="Run baseline experiments")
     parser.add_argument("--experiment", type=str, default="all",
-                        choices=["linear_classifier", "robustness", "all"])
+                        choices=["linear_classifier", "robustness",
+                                 "episode_linear", "input_space", "all"])
     parser.add_argument("--seeds", type=int, nargs="+", default=[42, 1337, 2024])
     args = parser.parse_args()
 
@@ -249,6 +410,10 @@ def main():
         run_linear_classifier(args)
     if args.experiment in ("robustness", "all"):
         run_robustness(args)
+    if args.experiment in ("episode_linear", "all"):
+        run_episode_linear(args)
+    if args.experiment in ("input_space", "all"):
+        run_input_space(args)
 
 
 if __name__ == "__main__":

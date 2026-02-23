@@ -10,7 +10,7 @@ deterministic: true
 dataset:
   name: "ASL"                     # ASL | Thai | LIBRAS | Arabic
   root: "data/processed/asl_alphabet_split"
-  num_classes: 28
+  num_classes: 29
   num_landmarks: 21
   landmark_dim: 3
   normalize_translation: true     # wrist-centred

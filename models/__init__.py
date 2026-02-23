@@ -39,8 +39,9 @@ def build_few_shot_model(cfg: dict, encoder):
         Few-shot model (PrototypicalNetwork, SiameseNetwork, or MatchingNetwork).
     """
     method = cfg["few_shot"]["method"]
+    distance = cfg.get("distance", "euclidean")
     if method == "prototypical":
-        return PrototypicalNetwork(encoder, distance="euclidean")
+        return PrototypicalNetwork(encoder, distance=distance)
     elif method == "siamese":
         return SiameseNetwork(encoder, embedding_dim=cfg["model"]["embedding_dim"])
     elif method == "matching":
