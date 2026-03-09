@@ -247,7 +247,69 @@ for target in asl_alphabet libras_alphabet arabic_sign_alphabet thai_fingerspell
 done
 ```
 
-### 7.3 Baselines
+### 7.3 Multi-source cross-lingual transfer (all 4 languages)
+
+Same entrypoint as Section 7.2, but with `--source` pointing to each
+non-default source language. Each run evaluates Source→Target for all 3
+targets (excluding same-language self-transfer).
+
+```bash
+# Record git commit for reproducibility
+git rev-parse HEAD   # 73e0ba7a0c87737c8b5dae48d2adbdbd158791bf
+
+# LIBRAS as source
+for target in arabic_sign_alphabet asl_alphabet thai_fingerspelling; do
+  python tools/run_cross_domain_expanded.py \
+    --source libras_alphabet --targets $target \
+    --encoders mlp --reprs raw angle raw_angle \
+    --modes frozen adapted --episodes 600 --seed 42 \
+    --output results/cross_domain_libras_to_${target%%_*}.csv
+done
+
+# Arabic as source
+for target in libras_alphabet asl_alphabet thai_fingerspelling; do
+  python tools/run_cross_domain_expanded.py \
+    --source arabic_sign_alphabet --targets $target \
+    --encoders mlp --reprs raw angle raw_angle \
+    --modes frozen adapted --episodes 600 --seed 42 \
+    --output results/cross_domain_arabic_to_${target%%_*}.csv
+done
+
+# Thai as source
+for target in asl_alphabet libras_alphabet arabic_sign_alphabet; do
+  python tools/run_cross_domain_expanded.py \
+    --source thai_fingerspelling --targets $target \
+    --encoders mlp --reprs raw angle raw_angle \
+    --modes frozen adapted --episodes 600 --seed 42 \
+    --output results/cross_domain_thai_to_${target%%_*}.csv
+done
+```
+
+**Key flags / hyperparameters** (identical to Section 7.2):
+
+| Parameter | Value |
+|-----------|-------|
+| Pretraining epochs | 3 |
+| Pretraining loss | SupCon (τ = 0.07) + NLL, weight 0.5 |
+| Pretraining episodes | 100 per epoch |
+| Adaptation epochs | 5 (last-layer fine-tune only) |
+| Evaluation | 5-way 5-shot, Q = 15, 600 episodes |
+| Seed | 42 |
+| Optimizer | AdamW (lr = 1e-4, wd = 1e-4) |
+| Grad clip | 1.0 |
+
+**Outputs:**
+- `results/cross_domain_libras_to_arabic.csv` (6 rows)
+- `results/cross_domain_libras_to_asl.csv` (6 rows)
+- `results/cross_domain_libras_to_thai.csv` (6 rows)
+- `results/cross_domain_arabic_to_libras.csv` (6 rows)
+- `results/cross_domain_arabic_to_asl.csv` (6 rows)
+- `results/cross_domain_arabic_to_thai.csv` (6 rows)
+- `results/cross_domain_thai_to_asl.csv` (6 rows)
+- `results/cross_domain_thai_to_libras.csv` (6 rows)
+- `results/cross_domain_thai_to_arabic.csv` (6 rows)
+
+### 7.4 Baselines
 
 ```bash
 # Linear classifier baseline (full train → test)
@@ -266,7 +328,7 @@ python tools/run_baselines.py --experiment input_space
 python tools/run_baselines.py --experiment all
 ```
 
-### 7.4 Normalisation ablation (requires re-preprocessing)
+### 7.5 Normalisation ablation (requires re-preprocessing)
 
 ```bash
 # Re-preprocess without normalisation
@@ -288,7 +350,7 @@ python tools/run_full_matrix.py \
     --episodes 600 --seed 42 --eval_split test --json_splits --auto_adjust_q
 ```
 
-### 7.5 Export LaTeX tables from CSVs
+### 7.6 Export LaTeX tables from CSVs
 
 ```bash
 python tools/export_tables.py --outdir paper/tables
@@ -393,6 +455,82 @@ Pretrained on ASL (3 epochs, SupCon), evaluated on each target's
 
 Full 48-row expanded CSV: [results/cross_domain_all.csv](results/cross_domain_all.csv).
 
+### 9.2b Full Cross-Lingual Transfer Matrix (4×4)
+
+We evaluate all 12 source→target directions (4 sources × 3 targets each)
+using the identical protocol (MLP encoder, 3 epochs SupCon pretrain,
+5-way 5-shot, Q=15, 600 episodes, seed 42, test split).
+
+#### LIBRAS as source
+
+| Direction | Mode | raw | angle | raw_angle |
+|-----------|------|-----|-------|-----------|
+| LIBRAS → ASL | Frozen | **93.7 ± 0.5** | 88.3 ± 0.7 | 93.4 ± 0.5 |
+| LIBRAS → ASL | Target-sup. | **95.0 ± 0.5** | 89.9 ± 0.6 | 94.4 ± 0.5 |
+| LIBRAS → Arabic | Frozen | 89.8 ± 0.6 | 91.2 ± 0.6 | **91.7 ± 0.6** |
+| LIBRAS → Arabic | Target-sup. | 91.8 ± 0.6 | 92.2 ± 0.5 | **93.8 ± 0.5** |
+| LIBRAS → Thai | Frozen | 51.1 ± 0.8 | 49.5 ± 0.8 | **52.2 ± 0.8** |
+| LIBRAS → Thai | Target-sup. | 55.9 ± 0.8 | 55.3 ± 0.8 | **57.4 ± 0.8** |
+
+#### Arabic as source
+
+| Direction | Mode | raw | angle | raw_angle |
+|-----------|------|-----|-------|-----------|
+| Arabic → ASL | Frozen | **94.1 ± 0.4** | 87.5 ± 0.7 | 93.6 ± 0.5 |
+| Arabic → ASL | Target-sup. | **95.5 ± 0.4** | 89.7 ± 0.6 | 95.0 ± 0.4 |
+| Arabic → LIBRAS | Frozen | 95.9 ± 0.5 | 94.9 ± 0.5 | **97.1 ± 0.4** |
+| Arabic → LIBRAS | Target-sup. | 96.5 ± 0.4 | 95.9 ± 0.4 | **97.4 ± 0.4** |
+| Arabic → Thai | Frozen | **54.6 ± 0.9** | 50.0 ± 0.8 | 52.8 ± 0.8 |
+| Arabic → Thai | Target-sup. | 58.8 ± 0.9 | 56.6 ± 0.8 | **59.2 ± 0.9** |
+
+#### Thai as source
+
+| Direction | Mode | raw | angle | raw_angle |
+|-----------|------|-----|-------|-----------|
+| Thai → ASL | Frozen | 94.5 ± 0.4 | 88.7 ± 0.6 | **95.1 ± 0.4** |
+| Thai → ASL | Target-sup. | **96.3 ± 0.3** | 89.9 ± 0.6 | 95.9 ± 0.4 |
+| Thai → LIBRAS | Frozen | 85.4 ± 0.7 | **94.6 ± 0.5** | 88.4 ± 0.7 |
+| Thai → LIBRAS | Target-sup. | 94.9 ± 0.5 | 95.3 ± 0.5 | **96.2 ± 0.4** |
+| Thai → Arabic | Frozen | 73.8 ± 0.8 | **90.2 ± 0.5** | 79.4 ± 0.8 |
+| Thai → Arabic | Target-sup. | 89.8 ± 0.6 | 92.4 ± 0.5 | **93.9 ± 0.5** |
+
+#### Best frozen accuracy — source comparison
+
+| Target | ASL (source) | LIBRAS (source) | Arabic (source) | Thai (source) |
+|--------|-------------|-----------------|-----------------|---------------|
+| ASL    | —           | 93.7 ± 0.5      | 94.1 ± 0.4      | **95.1 ± 0.4** |
+| LIBRAS | 95.0 ± 0.4  | —               | **97.1 ± 0.4** | 94.6 ± 0.5    |
+| Arabic | 91.3 ± 0.5  | **91.7 ± 0.6** | —               | 90.2 ± 0.5    |
+| Thai   | 53.2 ± 0.8  | 52.2 ± 0.8      | **54.6 ± 0.9** | —              |
+
+**Interpretation.**
+All four source languages yield viable cross-lingual transfer.
+Thai→ASL frozen (`raw_angle` 95.1%) is the best overall source for ASL,
+surpassing Arabic→ASL (94.1%) by +1.0 pp despite Thai having the fewest
+training samples (2,023). Arabic→LIBRAS frozen (`raw_angle` 97.1%) remains
+the best for LIBRAS (+2.1 pp over ASL). LIBRAS→Arabic (91.7%) and
+Thai→Arabic (90.2%) are competitive with ASL→Arabic (91.3%).
+Arabic→Thai (54.6%) edges out ASL→Thai (53.2%) by +1.4 pp.
+
+Transfer is *asymmetric*: Thai→ASL (95.1%) vs ASL→Thai (53.2%) shows
+a 42 pp gap — the most extreme in our matrix. Thai is a surprisingly
+effective *source* despite being the hardest *target*, suggesting that
+its 42-class diversity provides rich pre-training signal even with
+limited samples. The `raw` representation dominates transfers *to* ASL
+(from LIBRAS/Arabic), while `raw_angle` is best for Thai→ASL and most
+other directions.
+
+Raw CSVs:
+[results/cross_domain_libras_to_arabic.csv](results/cross_domain_libras_to_arabic.csv),
+[results/cross_domain_libras_to_asl.csv](results/cross_domain_libras_to_asl.csv),
+[results/cross_domain_libras_to_thai.csv](results/cross_domain_libras_to_thai.csv),
+[results/cross_domain_arabic_to_libras.csv](results/cross_domain_arabic_to_libras.csv),
+[results/cross_domain_arabic_to_asl.csv](results/cross_domain_arabic_to_asl.csv),
+[results/cross_domain_arabic_to_thai.csv](results/cross_domain_arabic_to_thai.csv),
+[results/cross_domain_thai_to_asl.csv](results/cross_domain_thai_to_asl.csv),
+[results/cross_domain_thai_to_libras.csv](results/cross_domain_thai_to_libras.csv),
+[results/cross_domain_thai_to_arabic.csv](results/cross_domain_thai_to_arabic.csv).
+
 ### 9.3 Normalisation ablation
 
 5-way 5-shot, MLP encoder, 600 episodes, seed 42:
@@ -489,6 +627,8 @@ sign_metric_learning/
 ├── results/
 │   ├── matrix_final.csv         # Within-domain (72 rows)
 │   ├── cross_domain.csv         # Cross-domain (4 rows)
+│   ├── cross_domain_libras_to_arabic.csv  # LIBRAS→Arabic (6 rows)
+│   ├── cross_domain_arabic_to_libras.csv  # Arabic→LIBRAS (6 rows)
 │   ├── baseline_linear.csv      # Linear classifier (8 rows)
 │   ├── robustness_seeds.csv     # Multi-seed (4 rows)
 │   └── nonorm_ablation.csv      # Normalisation ablation (8 rows)

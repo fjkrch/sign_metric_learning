@@ -2,12 +2,12 @@
 """
 Expanded cross-domain evaluation: all repr × encoder × mode combos.
 
-Evaluates ASL→{ASL, LIBRAS, Arabic, Thai} for every combination of:
+Evaluates SOURCE→TARGET for every combination of:
   - Encoders:       mlp, transformer
   - Representations: raw, angle, raw_angle
   - Modes:          frozen (random init pretrain), adapted (finetune_last)
 
-The "frozen" mode pretrains on ASL (train split) for a few epochs and then
+The "frozen" mode pretrains on SOURCE (train split) for a few epochs and then
 evaluates on target test splits with a frozen encoder.
 The "adapted" mode additionally fine-tunes the last encoder layer on the
 target's train split before evaluating on the target's test split.
@@ -16,6 +16,7 @@ Output:  results/cross_domain_expanded.csv
 
 Usage:
     python tools/run_cross_domain_expanded.py
+    python tools/run_cross_domain_expanded.py --source libras_alphabet --targets arabic_sign_alphabet
     python tools/run_cross_domain_expanded.py --encoders mlp --reprs raw angle
     python tools/run_cross_domain_expanded.py --modes frozen   # skip adaptation
 """
@@ -44,8 +45,8 @@ from utils.metrics import accuracy, few_shot_accuracy_with_ci
 from utils.seed import set_seed
 
 
-SOURCE = "asl_alphabet"
-TARGETS = ["asl_alphabet", "libras_alphabet", "arabic_sign_alphabet", "thai_fingerspelling"]
+DEFAULT_SOURCE = "asl_alphabet"
+ALL_DATASETS = ["asl_alphabet", "libras_alphabet", "arabic_sign_alphabet", "thai_fingerspelling"]
 DATA_ROOTS = {
     "asl_alphabet":         "data/processed/asl_alphabet",
     "libras_alphabet":      "data/processed/libras_alphabet",
@@ -73,10 +74,11 @@ def build_cfg(encoder: str, representation: str) -> dict:
 def pretrain_on_source(
     encoder_name: str,
     representation: str,
+    source: str = "asl_alphabet",
     epochs: int = 3,
     seed: int = 42,
 ) -> dict:
-    """Quick episodic pretraining on ASL train split. Returns model state_dict."""
+    """Quick episodic pretraining on source train split. Returns model state_dict."""
     from losses.supcon import build_loss
 
     set_seed(seed, deterministic=True)
@@ -85,14 +87,14 @@ def pretrain_on_source(
     cfg = build_cfg(encoder_name, representation)
     cfg["loss"] = {"name": "supcon", "supcon": {"temperature": 0.07}}
 
-    train_ds = SplitLandmarkDataset(SOURCE, "train", DATA_ROOTS[SOURCE], representation)
+    train_ds = SplitLandmarkDataset(source, "train", DATA_ROOTS[source], representation)
     labels = [train_ds[i][1] for i in range(len(train_ds))]
 
     n_way, k_shot, q_query = 5, 5, 15
     sampler = EpisodicSampler(
         labels, n_way=n_way, k_shot=k_shot, q_query=q_query,
         episodes=100, seed=seed, auto_adjust_q=True,
-        dataset_name=SOURCE, split_name="train",
+        dataset_name=source, split_name="train",
     )
     loader = DataLoader(train_ds, batch_sampler=sampler, collate_fn=collate_episode)
 
@@ -212,11 +214,13 @@ def evaluate_cross(model, target_ds, n_way, k_shot, q_query, episodes, seed, ds_
 
 def main():
     parser = argparse.ArgumentParser(description="Expanded cross-domain evaluation")
+    parser.add_argument("--source", type=str, default=DEFAULT_SOURCE,
+                        help="Source dataset for pretraining (default: asl_alphabet)")
     parser.add_argument("--encoders", nargs="+", default=["mlp", "transformer"])
     parser.add_argument("--reprs", nargs="+", default=["raw", "angle", "raw_angle"])
     parser.add_argument("--modes", nargs="+", default=["frozen", "adapted"],
                         choices=["frozen", "adapted"])
-    parser.add_argument("--targets", nargs="+", default=TARGETS)
+    parser.add_argument("--targets", nargs="+", default=ALL_DATASETS)
     parser.add_argument("--episodes", type=int, default=600)
     parser.add_argument("--pretrain_epochs", type=int, default=3)
     parser.add_argument("--seed", type=int, default=42)
@@ -226,25 +230,29 @@ def main():
     n_way, k_shot, q_query = 5, 5, 15
     results = []
 
+    source = args.source
+    print(f"\n  Source dataset: {source}")
+
     for enc in args.encoders:
         for rep in args.reprs:
             print(f"\n{'='*60}")
-            print(f"  Pretraining: {enc} / {rep} on {SOURCE}")
+            print(f"  Pretraining: {enc} / {rep} on {source}")
             print(f"{'='*60}")
             t0 = time.time()
-            state_dict = pretrain_on_source(enc, rep, epochs=args.pretrain_epochs, seed=args.seed)
+            state_dict = pretrain_on_source(enc, rep, source=source,
+                                           epochs=args.pretrain_epochs, seed=args.seed)
             print(f"  Pretrained in {time.time()-t0:.1f}s")
 
             for mode in args.modes:
                 for target in args.targets:
-                    print(f"\n  → {SOURCE} → {target} | {enc}/{rep} | mode={mode}")
+                    print(f"\n  → {source} → {target} | {enc}/{rep} | mode={mode}")
 
                     cfg = build_cfg(enc, rep)
                     encoder = build_encoder(cfg, rep)
                     model = build_few_shot_model(cfg, encoder)
                     model.load_state_dict(state_dict)
 
-                    if mode == "adapted" and target != SOURCE:
+                    if mode == "adapted" and target != source:
                         # Fine-tune last layer on target train
                         target_train = SplitLandmarkDataset(
                             target, "train", DATA_ROOTS[target], rep)
@@ -261,7 +269,7 @@ def main():
                     print(f"    Acc: {mean_acc:.4f} ± {ci:.4f}")
 
                     results.append({
-                        "source": SOURCE,
+                        "source": source,
                         "target": target,
                         "encoder": enc,
                         "representation": rep,
