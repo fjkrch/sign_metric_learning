@@ -217,6 +217,24 @@ python tools/run_full_matrix.py \
     --output results/matrix_final.csv
 ```
 
+### 7.1b Trained within-domain evaluation
+
+This variant first trains the encoder on each dataset's own JSON train split,
+then evaluates on the same dataset's JSON test split. It is useful when the
+goal is a trained within-domain model rather than the random-init no-pretraining
+protocol in Section 9.1.
+
+```bash
+python tools/run_within_domain_trained.py \
+    --datasets asl_alphabet arabic_sign_alphabet libras_alphabet thai_fingerspelling \
+    --encoders mlp transformer \
+    --representations raw angle raw_angle \
+    --shots 1 3 5 \
+    --episodes_train 100 --episodes_eval 100 --epochs 5 \
+    --q_query 5 --seed 42 --device cuda --auto_adjust_q \
+    --output results/within_domain_trained_full_gpu.csv --resume
+```
+
 ### 7.2 Cross-domain evaluation (pretrain on ASL)
 
 ```bash
@@ -429,6 +447,42 @@ Pass `--metric euclidean` (default) or `--metric cosine` to
 | Thai | Transformer | raw_angle | 42.3 ± 0.7 | 47.1 ± 0.7 | 48.7 ± 0.8 |
 
 Full 72-row CSV: [results/matrix_final.csv](results/matrix_final.csv).
+
+### 9.1b Within-domain after training
+
+Each row trains the encoder on the dataset's own train split, then evaluates
+5-way K-shot Prototypical Networks on the same dataset's test split. This run
+uses seed 42, Q=5, 100 train episodes per epoch, 100 evaluation episodes,
+5 epochs, and CUDA.
+
+| Dataset | Encoder | Repr | 1-shot | 3-shot | 5-shot |
+|---------|---------|------|--------|--------|--------|
+| ASL | MLP | raw | 93.32 +/- 1.81 | 97.56 +/- 0.82 | 98.76 +/- 0.55 |
+| ASL | MLP | angle | 92.12 +/- 1.79 | 96.00 +/- 1.23 | 97.60 +/- 0.77 |
+| ASL | MLP | raw_angle | **95.52 +/- 1.39** | **98.56 +/- 0.63** | **98.96 +/- 0.54** |
+| ASL | Transformer | raw | 89.04 +/- 2.55 | 93.24 +/- 1.76 | 94.40 +/- 1.27 |
+| ASL | Transformer | angle | 89.80 +/- 2.15 | 93.36 +/- 1.51 | 96.20 +/- 1.18 |
+| ASL | Transformer | raw_angle | 95.48 +/- 1.55 | 98.24 +/- 0.73 | 98.76 +/- 0.54 |
+| Arabic | MLP | raw | 89.12 +/- 1.96 | 94.04 +/- 1.49 | 94.28 +/- 1.35 |
+| Arabic | MLP | angle | 88.64 +/- 2.12 | 93.52 +/- 1.41 | 93.64 +/- 1.49 |
+| Arabic | MLP | raw_angle | 92.40 +/- 1.80 | 95.68 +/- 1.14 | 96.24 +/- 1.11 |
+| Arabic | Transformer | raw | 82.96 +/- 2.51 | 91.36 +/- 1.61 | 92.60 +/- 1.62 |
+| Arabic | Transformer | angle | 86.48 +/- 2.40 | 91.60 +/- 1.67 | 91.84 +/- 1.66 |
+| Arabic | Transformer | raw_angle | **92.88 +/- 1.64** | **96.16 +/- 1.19** | **96.60 +/- 0.99** |
+| LIBRAS | MLP | raw | 95.84 +/- 1.41 | 98.08 +/- 0.82 | 98.20 +/- 0.81 |
+| LIBRAS | MLP | angle | 95.08 +/- 1.55 | 97.48 +/- 0.94 | 97.72 +/- 0.71 |
+| LIBRAS | MLP | raw_angle | **97.48 +/- 1.02** | 98.08 +/- 0.87 | 98.32 +/- 0.79 |
+| LIBRAS | Transformer | raw | 90.44 +/- 1.89 | 95.64 +/- 1.20 | 96.64 +/- 1.10 |
+| LIBRAS | Transformer | angle | 91.52 +/- 1.81 | 94.44 +/- 1.49 | 94.52 +/- 1.61 |
+| LIBRAS | Transformer | raw_angle | **97.48 +/- 1.06** | **98.20 +/- 0.79** | **98.44 +/- 0.62** |
+| Thai | MLP | raw | 65.52 +/- 3.08 | 75.04 +/- 2.52 | 77.76 +/- 2.16 |
+| Thai | MLP | angle | 65.12 +/- 2.79 | 72.96 +/- 2.52 | 75.60 +/- 2.45 |
+| Thai | MLP | raw_angle | **68.64 +/- 2.93** | **78.88 +/- 2.41** | **80.56 +/- 2.30** |
+| Thai | Transformer | raw | 57.24 +/- 2.77 | 67.60 +/- 2.60 | 69.12 +/- 2.55 |
+| Thai | Transformer | angle | 59.52 +/- 3.04 | 66.96 +/- 2.67 | 69.04 +/- 2.63 |
+| Thai | Transformer | raw_angle | 66.68 +/- 3.10 | 75.68 +/- 2.49 | 78.68 +/- 2.34 |
+
+Full 72-row CSV: [results/within_domain_trained_full_gpu.csv](results/within_domain_trained_full_gpu.csv).
 
 ### 9.2 Cross-domain transfer (pretrained on ASL)
 
