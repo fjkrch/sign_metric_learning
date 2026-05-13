@@ -667,12 +667,12 @@ All configurable via YAML in `configs/`.
 ## Citation
 
 ```bibtex
-@inproceedings{geometry_sign_metric_2025,
+@inproceedings{geometry_sign_metric_2026,
   title     = {Geometry-Aware Metric Learning for Cross-Lingual Few-Shot
                Sign Language Recognition},
   author    = {Chyanin},
   booktitle = {Workshop on Sign Language Recognition, CVPR},
-  year      = {2025}
+  year      = {2026}
 }
 ```
 
