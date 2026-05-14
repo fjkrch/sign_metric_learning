@@ -11,6 +11,7 @@ from __future__ import annotations
 import argparse
 import csv
 import copy
+import statistics
 import sys
 from pathlib import Path
 
@@ -45,6 +46,7 @@ FIELDNAMES = [
     "representation",
     "n_way",
     "k_shot",
+    "seed",
     "q_query_train",
     "q_query_test",
     "episodes_train",
@@ -221,6 +223,7 @@ def run_experiment(
         "representation": representation,
         "n_way": args.n_way,
         "k_shot": k_shot,
+        "seed": args.seed,
         "q_query_train": train_sampler.q_query,
         "q_query_test": test_sampler.q_query,
         "episodes_train": args.episodes_train,
@@ -297,6 +300,115 @@ def write_markdown(csv_path: Path) -> Path:
     return md_path
 
 
+def write_seed_summary(csv_path: Path) -> tuple[Path, Path]:
+    rows = []
+    with open(csv_path, newline="", encoding="utf-8") as f:
+        rows.extend(csv.DictReader(f))
+
+    grouped = {}
+    for row in rows:
+        key = (
+            row["dataset"],
+            row["encoder"],
+            row["representation"],
+            int(row["k_shot"]),
+        )
+        grouped.setdefault(key, []).append(row)
+
+    summary_rows = []
+    for (dataset, encoder_name, representation, k_shot), group in grouped.items():
+        accs = [float(row["accuracy_mean"]) for row in group]
+        cis = [float(row["ci95"]) for row in group]
+        seeds = sorted(int(row["seed"]) for row in group)
+        summary_rows.append(
+            {
+                "dataset": dataset,
+                "encoder": encoder_name,
+                "representation": representation,
+                "k_shot": k_shot,
+                "seeds": " ".join(str(seed) for seed in seeds),
+                "n_seeds": len(seeds),
+                "accuracy_mean": f"{statistics.mean(accs):.6f}",
+                "accuracy_std": f"{statistics.stdev(accs):.6f}" if len(accs) > 1 else "0.000000",
+                "mean_episode_ci95": f"{statistics.mean(cis):.6f}",
+            }
+        )
+
+    order = {name: i for i, name in enumerate(DEFAULT_DATASETS)}
+    rep_order = {name: i for i, name in enumerate(DEFAULT_REPRESENTATIONS)}
+    summary_rows.sort(
+        key=lambda row: (
+            order.get(row["dataset"], 999),
+            row["encoder"],
+            rep_order.get(row["representation"], 999),
+            int(row["k_shot"]),
+        )
+    )
+
+    summary_csv = csv_path.with_name(f"{csv_path.stem}_summary.csv")
+    summary_fields = [
+        "dataset",
+        "encoder",
+        "representation",
+        "k_shot",
+        "seeds",
+        "n_seeds",
+        "accuracy_mean",
+        "accuracy_std",
+        "mean_episode_ci95",
+    ]
+    with open(summary_csv, "w", newline="", encoding="utf-8") as f:
+        writer = csv.DictWriter(f, fieldnames=summary_fields)
+        writer.writeheader()
+        writer.writerows(summary_rows)
+
+    summary_md = csv_path.with_name(f"{csv_path.stem}_summary.md")
+    datasets = []
+    for row in summary_rows:
+        if row["dataset"] not in datasets:
+            datasets.append(row["dataset"])
+
+    lines = ["# Trained Within-Domain Three-Seed Summary", ""]
+    lines.append("Cells show mean accuracy +/- seed standard deviation, in percent.")
+    lines.append("")
+    for dataset in datasets:
+        lines += [f"## {dataset}", ""]
+        lines += ["| Encoder | Representation | 1-shot | 3-shot | 5-shot |"]
+        lines += ["|---------|----------------|--------|--------|--------|"]
+        combos = []
+        for row in summary_rows:
+            key = (row["encoder"], row["representation"])
+            if row["dataset"] == dataset and key not in combos:
+                combos.append(key)
+        for encoder_name, representation in combos:
+            cells = []
+            for shot in DEFAULT_SHOTS:
+                match = next(
+                    (
+                        row
+                        for row in summary_rows
+                        if row["dataset"] == dataset
+                        and row["encoder"] == encoder_name
+                        and row["representation"] == representation
+                        and int(row["k_shot"]) == shot
+                    ),
+                    None,
+                )
+                if match:
+                    acc = float(match["accuracy_mean"]) * 100
+                    std = float(match["accuracy_std"]) * 100
+                    cells.append(f"{acc:.2f} +/- {std:.2f}")
+                else:
+                    cells.append("")
+            lines.append(
+                f"| {encoder_name} | {representation} | {cells[0]} | {cells[1]} | {cells[2]} |"
+            )
+        lines.append("")
+
+    summary_md.write_text("\n".join(lines), encoding="utf-8")
+    return summary_csv, summary_md
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Run trained within-domain experiments.")
     parser.add_argument("--config", default="configs/base.yaml")
@@ -320,6 +432,7 @@ def main() -> None:
     parser.add_argument("--epochs", type=int, default=5)
     parser.add_argument("--lr", type=float, default=1e-4)
     parser.add_argument("--seed", type=int, default=42)
+    parser.add_argument("--seeds", nargs="+", type=int, default=None)
     parser.add_argument("--device", default="auto")
     parser.add_argument("--auto_adjust_q", action="store_true")
     parser.add_argument("--single", action="store_true", help="Use --encoder/--representation/--k_shot only.")
@@ -344,6 +457,7 @@ def main() -> None:
             for row in csv.DictReader(f):
                 completed.add(
                     (
+                        int(row.get("seed", args.seed)),
                         row["dataset"],
                         row["encoder"],
                         row["representation"],
@@ -353,34 +467,48 @@ def main() -> None:
     elif out_path.exists():
         out_path.unlink()
 
-    total = len(args.datasets) * len(args.encoders) * len(args.representations) * len(args.shots)
+    seeds = args.seeds if args.seeds else [args.seed]
+    total = (
+        len(seeds)
+        * len(args.datasets)
+        * len(args.encoders)
+        * len(args.representations)
+        * len(args.shots)
+    )
     count = 0
-    for encoder_name in args.encoders:
-        for representation in args.representations:
-            if encoder_name == "gcn" and representation not in {"raw", "graph"}:
-                continue
-            for dataset_name in args.datasets:
-                for shot in args.shots:
-                    count += 1
-                    key = (dataset_name, encoder_name, representation, shot)
-                    if key in completed:
-                        print(f"[{count}/{total}] skip existing {key}", flush=True)
-                        continue
-                    print(f"[{count}/{total}] running {key}", flush=True)
-                    row = run_experiment(
-                        dataset_name,
-                        encoder_name,
-                        representation,
-                        shot,
-                        base_cfg,
-                        args,
-                    )
-                    append_row(out_path, row)
-                    print(f"Saved row to {out_path}", flush=True)
+    original_seed = args.seed
+    for seed in seeds:
+        args.seed = seed
+        for encoder_name in args.encoders:
+            for representation in args.representations:
+                if encoder_name == "gcn" and representation not in {"raw", "graph"}:
+                    continue
+                for dataset_name in args.datasets:
+                    for shot in args.shots:
+                        count += 1
+                        key = (seed, dataset_name, encoder_name, representation, shot)
+                        if key in completed:
+                            print(f"[{count}/{total}] skip existing {key}", flush=True)
+                            continue
+                        print(f"[{count}/{total}] running {key}", flush=True)
+                        row = run_experiment(
+                            dataset_name,
+                            encoder_name,
+                            representation,
+                            shot,
+                            base_cfg,
+                            args,
+                        )
+                        append_row(out_path, row)
+                        print(f"Saved row to {out_path}", flush=True)
+    args.seed = original_seed
 
     md_path = write_markdown(out_path)
+    summary_csv, summary_md = write_seed_summary(out_path)
     print(f"Saved {out_path}")
     print(f"Saved {md_path}")
+    print(f"Saved {summary_csv}")
+    print(f"Saved {summary_md}")
 
 
 if __name__ == "__main__":

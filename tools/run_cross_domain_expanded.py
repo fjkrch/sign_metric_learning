@@ -55,6 +55,12 @@ DATA_ROOTS = {
 }
 
 
+def resolve_device(device_arg: str | None = None) -> torch.device:
+    if device_arg:
+        return torch.device(device_arg)
+    return torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+
 def build_cfg(encoder: str, representation: str) -> dict:
     return {
         "representation": representation,
@@ -77,12 +83,13 @@ def pretrain_on_source(
     source: str = "asl_alphabet",
     epochs: int = 3,
     seed: int = 42,
+    device: torch.device | None = None,
 ) -> dict:
     """Quick episodic pretraining on source train split. Returns model state_dict."""
     from losses.supcon import build_loss
 
     set_seed(seed, deterministic=True)
-    device = torch.device("cpu")
+    device = device or resolve_device()
 
     cfg = build_cfg(encoder_name, representation)
     cfg["loss"] = {"name": "supcon", "supcon": {"temperature": 0.07}}
@@ -108,7 +115,7 @@ def pretrain_on_source(
         for batch in loader:
             data, lbls = batch
             sx, sy, qx, qy = split_support_query(
-                (data.to(device), lbls.to(device)), n_way, k_shot, q_query)
+                (data.to(device), lbls.to(device)), n_way, k_shot, sampler.q_query)
             log_probs = model(sx, sy, qx, n_way)
             cls_loss = F.nll_loss(log_probs, qy)
             all_x = torch.cat([sx, qx])
